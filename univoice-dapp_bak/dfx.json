@@ -1,0 +1,27 @@
+{
+  "canisters": {
+    "univoice-dapp-backend": {
+      "candid": "src/univoice-dapp-backend/univoice-dapp-backend.did",
+      "package": "univoice-dapp-backend",
+      "type": "rust"
+    },
+    "univoice-dapp-frontend": {
+      "dependencies": [
+        "univoice-dapp-backend"
+      ],
+      "source": [
+        "src/univoice-dapp-frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "univoice-dapp-frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
