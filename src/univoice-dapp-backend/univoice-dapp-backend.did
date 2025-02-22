@@ -1,94 +1,121 @@
-type BTreeMap = vec record {
-    text;
-    variant {
-        Int : int;
-        Map : BTreeMap;
-        Nat : nat;
-        Nat64 : nat64;
-        Blob : blob;
-        Text : text;
-        Array : vec Value;
-    };
+type ComfyUINode = record {
+    ai_node : text;
+    status : text;
 };
-type CreateFileInput = record {
-    status : opt int8;
-    content : opt blob;
-    custom : opt vec record { text; Value };
-    hash : opt blob;
-    name : text;
-    crc32 : opt nat32;
-    size : opt nat64;
-    content_type : text;
-    parent : nat32;
+
+type Subscriber = record {
+    topic : text;
 };
-type CreateFileOutput = record { id : nat32; created_at : nat64 };
-type FileInfo = record {
-    ex : opt vec record { text; Value };
-    id : nat32;
-    status : int8;
-    updated_at : nat64;
-    custom : opt vec record { text; Value };
-    hash : opt blob;
-    name : text;
-    size : nat64;
-    content_type : text;
-    created_at : nat64;
-    filled : nat64;
-    chunks : nat32;
-    parent : nat32;
+
+type WorkLoadInitParam = record {
+    token_block : nat;
+    poll_account : text;
+    nft_collection_id : text;
 };
-type LoadModelInput = record {
-    tokenizer_id : nat32;
-    config_id : nat32;
-    model_id : nat32;
+
+type ComfyUIPayload = record {
+    promt_id : text;
+    client_id : text;
+    ai_node : text;
+    app_info : text;
+    wk_id : text;
+    voice_key : text;
+    deduce_asset_key : text;
+    status : text;
+    gmt_datatime : nat64;
 };
-type Result = variant { Ok : nat64; Err : text };
-type Result_1 = variant { Ok; Err : text };
-type Result_2 = variant { Ok : CreateFileOutput; Err : text };
-type Result_3 = variant { Ok : bool; Err : text };
-type Result_4 = variant { Ok : vec FileInfo; Err : text };
-type Result_5 = variant { Ok : State; Err };
-type Result_6 = variant { Ok : UpdateFileChunkOutput; Err : text };
-type Result_7 = variant { Ok : UpdateFileOutput; Err : text };
-type State = record {
-    ai_config : nat32;
-    ai_model : nat32;
-    ai_tokenizer : nat32;
+
+type WorkLoadLedgerItem = record {
+    payload : ComfyUIPayload;
+    block_height : nat;
+    gmt_datatime : nat64;
 };
-type UpdateFileChunkInput = record {
-    id : nat32;
-    chunk_index : nat32;
-    content : blob;
-    crc32 : opt nat32;
+
+type UploaderPowContractInput = record {
+    principal_id : text;
+    prompt_id : text;
 };
-type UpdateFileChunkOutput = record { updated_at : nat64; filled : nat64 };
-type UpdateFileInput = record {
-    id : nat32;
-    status : opt int8;
-    custom : opt vec record { text; Value };
-    hash : opt blob;
-    name : opt text;
-    content_type : opt text;
+
+type UploaderPowContract = record {
+    principal_id : text;
+    prompt_id : text;
+    proof_of_work : nat;
 };
-type UpdateFileOutput = record { updated_at : nat64 };
-type Value = variant {
-    Int : int;
-    Map : BTreeMap;
-    Nat : nat;
-    Nat64 : nat64;
-    Blob : blob;
-    Text : text;
-    Array : vec Value;
+
+type WorkflowLedgerItem = record {
+    principal_id : text;
+    prompt_json : text;
+    gmt_datetime : nat64;
 };
-service : () -> {
-    admin_load_model : (LoadModelInput) -> (Result);
-    admin_set_managers : (vec principal) -> (Result_1);
-    admin_set_visibility : (nat8) -> (Result_1);
-    create_file : (CreateFileInput, opt blob) -> (Result_2);
-    delete_file : (nat32, opt blob) -> (Result_3);
-    list_files : (nat32, opt nat32, opt nat32, opt blob) -> (Result_4) query;
-    set_max_file_size : (nat64) -> (Result_1);
-    state : () -> (Result_5) query;
-    update_file_chunk : (UpdateFileChunkInput, opt blob) -> (Result_6);
-    update_file_info : (UpdateFileInput, opt blob) -> (Result_7);
-}
+
+type Event0301008 = record {
+    topic : text;
+    payload : WorkLoadLedgerItem;
+};
+
+type CommonInfoCfg = record {
+    key : text;
+    content : text;
+    version : text;
+    isvalid : bool;
+};
+
+type BatchInfoItem = record {
+    key : text;
+    content : text;
+};
+
+type LicenseCollection = record {
+    collection_id : text;
+    token_id : vec text;
+};
+
+type CustomInfo = record {
+    dapp_principal : text;
+    wallet_principal : text;
+    user_logo : text;
+    nick_name : text;
+    license_collections : vec LicenseCollection;
+};
+
+type LoginType = variant {
+    Dapp;
+    Wallet;
+};
+
+type Result = variant {
+    Ok : WorkLoadLedgerItem;
+    Err : text;
+};
+
+type Result_1 = variant {
+    Ok : vec WorkflowLedgerItem;
+    Err : text;
+};
+
+service : {
+    greet : (text) -> (text) query;
+    query_comfy_nodes : () -> (opt vec ComfyUINode) query;
+    reg_comfy_nodes : (vec ComfyUINode) -> (opt vec ComfyUINode);
+    gen_ai_node_router : () -> (opt ComfyUINode) query;
+    export_minting_contract : () -> (opt WorkLoadInitParam) query;
+    update_minting_contract : (WorkLoadInitParam) -> (opt WorkLoadInitParam);
+    subscribe : (Subscriber) -> ();
+    push_workload_record : (ComfyUIPayload) -> (Result);
+    export_all_uploader_pow_contracts : () -> (vec UploaderPowContract) query;
+    query_curr_workload : () -> (opt vec WorkLoadLedgerItem) query;
+    store_uploader_pow_contract : (UploaderPowContractInput) -> (Result);
+    store_workflow_data : (text, text) -> (Result);
+    fetch_workflow_data : (text) -> (text) query;
+    query_workflow_ledger_by_principal_id : (text) -> (Result_1) query;
+    query_wait_identity_workflows : () -> (vec text) query;
+    query_wait_training_workflows : () -> (vec text) query;
+    add_info_item : (text, text) -> (Result);
+    batch_add_info_items : (vec BatchInfoItem) -> (Result);
+    get_info_by_key : (text) -> (opt CommonInfoCfg) query;
+    batch_get_info : (vec text) -> (vec opt CommonInfoCfg) query;
+    update_info_item : (text, text) -> (Result);
+    add_custom_info : (CustomInfo) -> (Result);
+    get_custom_info : (LoginType, text) -> (opt CustomInfo) query;
+    get_custom_info_list : (nat32, nat32) -> (vec CustomInfo) query;
+};
