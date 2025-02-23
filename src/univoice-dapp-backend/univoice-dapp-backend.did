@@ -1,121 +1,59 @@
-type ComfyUINode = record {
-    ai_node : text;
-    status : text;
-};
-
-type Subscriber = record {
-    topic : text;
-};
-
-type WorkLoadInitParam = record {
-    token_block : nat;
-    poll_account : text;
-    nft_collection_id : text;
-};
-
-type ComfyUIPayload = record {
-    promt_id : text;
-    client_id : text;
-    ai_node : text;
-    app_info : text;
-    wk_id : text;
-    voice_key : text;
-    deduce_asset_key : text;
-    status : text;
-    gmt_datatime : nat64;
-};
-
-type WorkLoadLedgerItem = record {
-    payload : ComfyUIPayload;
-    block_height : nat;
-    gmt_datatime : nat64;
-};
-
-type UploaderPowContractInput = record {
-    principal_id : text;
-    prompt_id : text;
-};
-
-type UploaderPowContract = record {
-    principal_id : text;
-    prompt_id : text;
-    proof_of_work : nat;
-};
-
-type WorkflowLedgerItem = record {
-    principal_id : text;
-    prompt_json : text;
-    gmt_datetime : nat64;
-};
-
-type Event0301008 = record {
-    topic : text;
-    payload : WorkLoadLedgerItem;
+type BatchInfoItem = record {
+    key: text;
+    content: text;
 };
 
 type CommonInfoCfg = record {
-    key : text;
-    content : text;
-    version : text;
-    isvalid : bool;
-};
-
-type BatchInfoItem = record {
-    key : text;
-    content : text;
-};
-
-type LicenseCollection = record {
-    collection_id : text;
-    token_id : vec text;
+    key: text;
+    content: text;
+    version: text;
+    isvalid: bool;
 };
 
 type CustomInfo = record {
-    dapp_principal : text;
-    wallet_principal : text;
-    user_logo : text;
-    nick_name : text;
-    license_collections : vec LicenseCollection;
+    dapp_principal: text;
+    wallet_principal: text;
+    nick_name: text;
+    logo: text;
 };
 
-type LoginType = variant {
-    Dapp;
-    Wallet;
+type InviteCode = record {
+    code: text;
+    owner: text;
+    created_at: nat64;
+    is_used: bool;
+    used_by: opt text;
 };
 
-type Result = variant {
-    Ok : WorkLoadLedgerItem;
-    Err : text;
-};
-
-type Result_1 = variant {
-    Ok : vec WorkflowLedgerItem;
-    Err : text;
+type InviteRewardRecord = record {
+    id: text;
+    invite_code: text;
+    code_owner: text;
+    new_user: text;
+    token_amount: nat;
+    created_at: nat64;
+    is_claimed: bool;
+    claimed_at: opt nat64;
 };
 
 service : {
-    greet : (text) -> (text) query;
-    query_comfy_nodes : () -> (opt vec ComfyUINode) query;
-    reg_comfy_nodes : (vec ComfyUINode) -> (opt vec ComfyUINode);
-    gen_ai_node_router : () -> (opt ComfyUINode) query;
-    export_minting_contract : () -> (opt WorkLoadInitParam) query;
-    update_minting_contract : (WorkLoadInitParam) -> (opt WorkLoadInitParam);
-    subscribe : (Subscriber) -> ();
-    push_workload_record : (ComfyUIPayload) -> (Result);
-    export_all_uploader_pow_contracts : () -> (vec UploaderPowContract) query;
-    query_curr_workload : () -> (opt vec WorkLoadLedgerItem) query;
-    store_uploader_pow_contract : (UploaderPowContractInput) -> (Result);
-    store_workflow_data : (text, text) -> (Result);
-    fetch_workflow_data : (text) -> (text) query;
-    query_workflow_ledger_by_principal_id : (text) -> (Result_1) query;
-    query_wait_identity_workflows : () -> (vec text) query;
-    query_wait_training_workflows : () -> (vec text) query;
-    add_info_item : (text, text) -> (Result);
-    batch_add_info_items : (vec BatchInfoItem) -> (Result);
-    get_info_by_key : (text) -> (opt CommonInfoCfg) query;
-    batch_get_info : (vec text) -> (vec opt CommonInfoCfg) query;
-    update_info_item : (text, text) -> (Result);
-    add_custom_info : (CustomInfo) -> (Result);
-    get_custom_info : (LoginType, text) -> (opt CustomInfo) query;
-    get_custom_info_list : (nat32, nat32) -> (vec CustomInfo) query;
+    // Common Info Management
+    "add_info_item": (key: text, content: text) -> (variant { Ok; Err: text; });
+    "get_info_by_key": (key: text) -> (opt CommonInfoCfg) query;
+    "batch_add_info_items": (vec BatchInfoItem) -> (variant { Ok; Err: text; });
+    "batch_get_info": (vec text) -> (vec opt CommonInfoCfg) query;
+    "update_info_item": (key: text, content: text) -> (variant { Ok; Err: text; });
+
+    // Custom Info Management
+    "add_custom_info": (CustomInfo) -> (variant { Ok; Err: text; });
+    "get_custom_info": (opt text, opt text) -> (opt CustomInfo) query;
+    "update_custom_info": (opt text, opt text, text, text) -> (variant { Ok; Err: text; });
+    "list_custom_info": (nat64, nat64) -> (vec CustomInfo) query;
+
+    // Invite Code Management
+    "create_invite_code": (owner: text) -> (variant { Ok: InviteCode; Err: text; });
+    "use_invite_code": (code: text, new_user: text) -> (variant { Ok: InviteRewardRecord; Err: text; });
+    "claim_reward": (reward_id: text) -> (variant { Ok: InviteRewardRecord; Err: text; });
+    "get_user_rewards": (user_principal: text) -> (vec InviteRewardRecord) query;
+    "verify_invite_code": (code: text) -> (opt InviteCode) query;
 };

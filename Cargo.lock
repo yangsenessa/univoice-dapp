@@ -1389,6 +1389,7 @@ dependencies = [
  "ic-oss-can",
  "ic-oss-types",
  "ic-stable-structures",
+ "icrc-ledger-types",
  "rand",
  "serde",
  "serde_bytes",
