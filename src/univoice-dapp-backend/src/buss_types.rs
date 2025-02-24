@@ -166,10 +166,10 @@ pub fn batch_add_info_items(items: Vec<BatchInfoItem>) -> Result<(), String> {
     })
 }
 
-pub fn get_info_by_key(key: String) -> Option<CommonInfoCfg> {
+pub fn get_info_by_key(key: &String) -> Option<CommonInfoCfg> {
     COMMON_INFO_MAP.with(|store| {
         let store = store.borrow();
-        store.get(&key)
+        store.get(key)
             .filter(|info| info.check_validity())
     })
 }

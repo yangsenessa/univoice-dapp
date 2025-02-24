@@ -1,3 +1,4 @@
+
 use candid::{CandidType, Principal, Nat};
 use serde::{Deserialize, Serialize};
 use icrc_ledger_types::icrc1::account::Account;
@@ -9,8 +10,6 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use crate::buss_types::get_info_by_key;
 
 type TransferResult = Result<Nat, TransferError>;
-type Account__1 = Account;
-type TransferArgs = TransferArg;
 
 
 #[derive(CandidType, Debug, Clone, Deserialize)]
@@ -32,7 +31,7 @@ pub struct Icrc37_TransferFromArg {
 type TransferFromResult = Result<Nat, TransferError>;
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(CandidType,Debug, Clone, Serialize, Deserialize)]
 pub struct NFTCollection {
     pub name: String,
     pub symbol: String,
@@ -44,8 +43,57 @@ pub struct NFTCollection {
     pub allowed_transfers: bool,
     pub expired_at: Option<u64>
 }
+impl NFTCollection {
+    pub async fn init_nft_collection(collection_id: &str) -> Result<Self, String> {
+        let principal = Principal::from_text(collection_id)
+            .map_err(|e| format!("Invalid collection ID: {}", e))?;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+        // Get name
+        let name: (String,) = ic_cdk::call(principal, "icrc7_name", ())
+            .await
+            .map_err(|e| format!("Failed to get name: {:?}", e))?;
+
+        // Get symbol  
+        let symbol: (String,) = ic_cdk::call(principal, "icrc7_symbol", ())
+            .await
+            .map_err(|e| format!("Failed to get symbol: {:?}", e))?;
+
+        // Get description
+        let description: (Option<String>,) = ic_cdk::call(principal, "icrc7_description", ())
+            .await
+            .map_err(|e| format!("Failed to get description: {:?}", e))?;
+
+        // Get logo
+        let logo: (Option<String>,) = ic_cdk::call(principal, "icrc7_logo", ())
+            .await
+            .map_err(|e| format!("Failed to get logo: {:?}", e))?;
+
+        // Get supply cap
+        let supply_cap: (Option<Nat>,) = ic_cdk::call(principal, "icrc7_supply_cap", ())
+            .await
+            .map_err(|e| format!("Failed to get supply cap: {:?}", e))?;
+
+        // Get total supply
+        let total_supply: (Nat,) = ic_cdk::call(principal, "icrc7_total_supply", ())
+            .await
+            .map_err(|e| format!("Failed to get total supply: {:?}", e))?;
+
+        Ok(Self {
+            name: name.0,
+            symbol: symbol.0,
+            description: description.0,
+            logo: logo.0,
+            supply_cap: supply_cap.0.map(|n| n.0.try_into().unwrap_or(0)),
+            total_supply: total_supply.0.0.try_into().unwrap_or(0),
+            owner: principal,
+            allowed_transfers: true,
+            expired_at: None
+        })
+    }
+}
+
+
+#[derive(CandidType,Debug, Clone, Serialize, Deserialize)]
 pub struct UserNFTHolding {
     pub owner: Principal,
     pub nft_colletion_id:String,
@@ -98,7 +146,26 @@ impl UserNFTHolding {
         return nft_tokens_param;
     }
 }
-
+impl NFTCollection {
+    pub async fn get_min_available_token_id(&self, principalid: &str) -> Result<Option<u128>, String> {
+        for token_id in 0..self.total_supply {
+            let owner: (Vec<Option<Account__3>>,) = ic_cdk::call(
+                self.owner,
+                "icrc7_owner_of",
+                (vec![Nat::from(token_id)],)
+            )
+            .await
+            .map_err(|e| format!("Failed to get owner: {:?}", e))?;
+            
+            if let Some(account) = owner.0.get(0).and_then(|a| a.as_ref()) {
+                if account.owner.to_string() != principalid {
+                    return Ok(Some(token_id));
+                }
+            }
+        }
+        Ok(None)
+    }
+}
 
 impl UserNFTHolding {
     pub async fn construct_user_nft_holding(
@@ -106,7 +173,7 @@ impl UserNFTHolding {
         nft_canister_key: &str,
     ) -> Result<Self, String> {
         // Get NFT canister id from CommonInfoCfg
-        let nft_canister = match get_info_by_key(nft_canister_key.to_string()) {
+        let nft_canister = match get_info_by_key(&nft_canister_key.to_string()) {
             Some(info) => info.content,
             None => return Err("NFT canister configuration not found".to_string()),
         };
@@ -145,16 +212,16 @@ impl UserNFTHolding {
 
         Ok(Self {
             owner,
-            nft_colletion_id: nft_canister,
+            nft_colletion_id: nft_canister.clone(),
             token_ids,
-            expired_at: get_info_by_key("nft_expired_at".to_string()).map(|info| 
-                info.content.parse::<u64>().unwrap_or(0)
+                        expired_at: get_info_by_key(&format!("{}_nft_expired_at", nft_canister)).map(|info| 
+                            info.content.parse::<u64>().unwrap_or(0)
             ),
         })
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(CandidType,Debug, Clone, Serialize, Deserialize)]
 pub struct UserLicenseRecord {
     pub owner: String,
     pub nft_collection_id: String,
@@ -173,39 +240,6 @@ impl UserLicenseRecord {
         let now = ic_cdk::api::time();
         let seconds_now = now / 1_000_000_000;
 
-        // Get platform token receive account from CommonInfoCfg
-        let platform_account = get_info_by_key("platform_token_account".to_string())
-            .ok_or("Platform token account not found")?;
-
-        // Get license price from CommonInfoCfg
-        let license_price = get_info_by_key(format!("{}_price", nft_collection_id))
-            .map(|info| info.content.parse::<u64>().unwrap_or(0))
-            .ok_or("License price not found")?;
-
-        // Transfer ICP tokens to platform account
-        let transfer_args = TransferArg {
-            from_subaccount: None,
-            to: Account {
-            owner: Principal::from_text(&platform_account.content)
-                .map_err(|e| format!("Invalid platform principal: {}", e))?,
-            subaccount: None,
-            },
-            amount: Nat::from(license_price),
-            fee: None,
-            memo: Some(Vec::from("Get license").into()),
-            created_at_time: Some(ic_cdk::api::time()),
-        };
-
-        // Call ICP ledger for token transfer
-        ic_cdk::call::<(TransferArg,), (Result<Nat, TransferError>,)>(
-            Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap(), // ICP ledger canister
-            "icrc1_transfer",
-            (transfer_args,),
-        )
-        .await
-        .map_err(|e| format!("Failed to transfer ICP: {:?}", e))?
-        .0
-        .map_err(|e| format!("Transfer error: {:?}", e))?;
 
         // Transfer NFT using icrc37_transfer_from
         let transfer_args = Icrc37_TransferFromArg {
@@ -243,7 +277,7 @@ impl UserLicenseRecord {
 
         // Set expiration
         let expired_duration_key = format!("{}_expired_duration", nft_collection_id);
-        let expired_duration = get_info_by_key(expired_duration_key)
+        let expired_duration = get_info_by_key(&expired_duration_key)
             .map(|info| info.content.parse::<u64>().unwrap_or(0))
             .ok_or(format!("License expiration duration not found for {}", nft_collection_id))?;
 
@@ -260,4 +294,98 @@ impl UserLicenseRecord {
     }
 }
 
+#[derive(CandidType, Serialize, Deserialize)]
+pub struct UserNFTsRequest {
+    pub user: String,
+    pub license_ids: Vec<String>,
+}
 
+#[derive(CandidType, Serialize, Deserialize)]
+pub struct UserNFTsResponse {
+    pub holdings: Vec<UserNFTHolding>,
+}
+
+//nft_key: key-NFTCollection id; value-NFTName
+pub async fn get_all_user_nfts(user: Principal, license_ids: Vec<String>) -> Result<Vec<UserNFTHolding>, String> {
+    let mut holdings = Vec::new();
+    
+    // Construct NFT collection keys from license IDs
+    let nft_keys: Vec<String> = license_ids.iter()
+        .map(|id| format!("nft_{}", id))
+        .collect();
+
+    for nft_key in nft_keys {
+        if let Some(info) = get_info_by_key(&nft_key) {
+            match UserNFTHolding::construct_user_nft_holding(user, nft_key.as_str()).await {
+                Ok(holding) => {
+                    if !holding.token_ids.is_empty() {
+                        holdings.push(holding); 
+                    }
+                },
+                Err(e) => ic_cdk::println!("Error getting holdings for {}: {}", nft_key, e),
+            }
+        }
+    }
+    
+    // Sort holdings by NFT collection ID for proper grouping
+    holdings.sort_by(|a, b| a.nft_colletion_id.cmp(&b.nft_colletion_id));
+    
+    Ok(holdings)
+}
+
+/// Retrieves information about an NFT collection by its collection ID.
+///
+/// # Arguments
+///
+/// * `collection_id` - A string slice containing the Principal ID of the NFT collection canister
+///
+/// # Returns
+///
+/// * `Result<NFTCollection, String>` - Returns an NFTCollection struct if successful, or an error message if the operation fails
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// * The collection ID is not a valid Principal
+/// * The canister calls to fetch collection information fail
+/// * The collection metadata cannot be retrieved
+///
+/// # Example
+///
+/// ```
+/// let collection = get_nft_collection("rrkah-fqaaa-aaaaa-aaaaq-cai").await?;
+/// println!("Collection name: {}", collection.name);
+/// ```
+pub async fn get_nft_collection(collection_id: &str) -> Result<NFTCollection, String> {
+    NFTCollection::init_nft_collection(collection_id).await
+}
+
+pub async fn buy_nft_license(
+    user_principal: &str,
+    nft_collection_id: &str,
+    amount: u64 
+) -> Result<Vec<UserLicenseRecord>, String> {
+    // Initialize NFT collection
+    let collection = NFTCollection::init_nft_collection(nft_collection_id).await?;
+    
+    let mut records = Vec::new();
+    
+    // Find and process each token
+    for _ in 0..amount {
+        // Get the next available token ID
+        let token_id = collection.get_min_available_token_id(user_principal).await?
+            .ok_or("No available tokens left")?;
+            
+        // Create license record
+        let record = UserLicenseRecord::new(
+            user_principal.to_string(),
+            nft_collection_id.to_string(),
+            collection.name.clone(),
+            token_id
+        ).await?;
+        
+        records.push(record);
+    }
+    
+    Ok(records)
+}

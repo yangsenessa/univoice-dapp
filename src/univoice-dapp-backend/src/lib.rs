@@ -72,7 +72,7 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, time::Duration};
 
-
+use license_types::{NFTCollection, UserLicenseRecord, UserNFTsRequest, UserNFTsResponse};
 
 #[ic_cdk::init]
 fn init() {
@@ -105,7 +105,7 @@ async fn add_info_item(key: String, content: String) -> Result<(), String> {
 
 #[ic_cdk::query]
 fn get_info_by_key(key: String) -> Option<buss_types::CommonInfoCfg> {
-    buss_types::get_info_by_key(key)
+    buss_types::get_info_by_key(&key)
 }
 
 #[ic_cdk::update]
@@ -173,6 +173,37 @@ fn get_user_rewards(user_principal: String) -> Vec<activate_types::InviteRewardR
 #[ic_cdk::query]
 fn verify_invite_code(code: String) -> Option<activate_types::InviteCode> {
     activate_types::verify_invite_code(code)
+}
+
+
+#[ic_cdk::update]
+async fn get_user_nfts(req: UserNFTsRequest) -> Result<UserNFTsResponse, String> {
+    is_called_by_dapp_frontend()?;
+    
+    let principal = Principal::from_text(&req.user)
+        .map_err(|e| format!("Invalid user principal: {}", e))?;
+
+    let holdings = license_types::get_all_user_nfts(principal, req.license_ids).await?;
+    
+    Ok(UserNFTsResponse { holdings })
+}
+
+#[ic_cdk::query]
+async fn get_nft_collection(collection_id: String) -> Result<NFTCollection, String> {
+    license_types::get_nft_collection(&collection_id).await
+}
+
+#[ic_cdk::update]
+async fn buy_nft_license(buyer: String, collection_id: String, quantity: u64) -> Result<(Vec<UserLicenseRecord>, NFTCollection), String> {
+    is_called_by_dapp_frontend()?;
+    
+    let buyer_principal = Principal::from_text(&buyer)
+        .map_err(|e| format!("Invalid buyer principal: {}", e))?;
+        
+    let transaction_records = license_types::buy_nft_license(&buyer, &collection_id, quantity).await?;
+    let collection = license_types::get_nft_collection(&collection_id).await?;
+    
+    Ok((transaction_records, collection))
 }
 
 ic_cdk::export_candid!();

@@ -1,3 +1,49 @@
+type Account = record {
+    owner: principal;
+    subaccount: opt vec nat8;
+};
+
+type Account__3 = record {
+    owner: principal;
+    subaccount: opt vec nat8;
+};
+
+type NFTCollection = record {
+    name: text;
+    symbol: text;
+    description: opt text;
+    logo: opt text;
+    supply_cap: opt nat;
+    total_supply: nat;
+    owner: principal;
+    allowed_transfers: bool;
+    expired_at: opt nat64;
+};
+
+type UserNFTHolding = record {
+    owner: principal;
+    nft_colletion_id: text;
+    token_ids: vec nat;
+    expired_at: opt nat64;
+};
+
+type UserLicenseRecord = record {
+    owner: text;
+    nft_collection_id: text;
+    license_name: text;
+    token_id: nat;
+    purchase_time: nat64;
+    expired_at: opt nat64;
+};
+
+type UserNFTsRequest = record {
+    user: text;
+    license_ids: vec text;
+};
+
+type UserNFTsResponse = record {
+    holdings: vec UserNFTHolding;
+};
 type BatchInfoItem = record {
     key: text;
     content: text;
@@ -36,6 +82,14 @@ type InviteRewardRecord = record {
     claimed_at: opt nat64;
 };
 
+type LicenseFetchResult = variant {
+    Ok: record {
+        vec UserLicenseRecord;
+        NFTCollection;
+    };
+    Err: text;
+};
+
 service : {
     // Common Info Management
     "add_info_item": (key: text, content: text) -> (variant { Ok; Err: text; });
@@ -56,4 +110,8 @@ service : {
     "claim_reward": (reward_id: text) -> (variant { Ok: InviteRewardRecord; Err: text; });
     "get_user_rewards": (user_principal: text) -> (vec InviteRewardRecord) query;
     "verify_invite_code": (code: text) -> (opt InviteCode) query;
+    // NFT Management
+    "get_user_nfts": (UserNFTsRequest) -> (variant { Ok: UserNFTsResponse; Err: text; });
+    "get_nft_collection": (collection_id: text) -> (variant { Ok: NFTCollection; Err: text; });
+    "buy_nft_license": (buyer: text, collection_id: text, quantity: nat64) -> (LicenseFetchResult);
 };
