@@ -63,6 +63,7 @@
 /// Exports the Candid interface definition for the canister.
 mod buss_types;
 mod activate_types;
+mod license_types;
 use candid::{CandidType, Principal};
 
 

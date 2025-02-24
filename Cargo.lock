@@ -683,6 +683,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "icrc-nft-types"
+version = "0.1.0"
+source = "git+https://github.com/pramitgaha21/icrc-nft-types.git#c0b16a95ead6912fb34758bef69b66ea210cae00"
+dependencies = [
+ "candid",
+ "ic-stable-structures",
+ "icrc-ledger-types",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "icu_collections"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1390,6 +1402,7 @@ dependencies = [
  "ic-oss-types",
  "ic-stable-structures",
  "icrc-ledger-types",
+ "icrc-nft-types",
  "rand",
  "serde",
  "serde_bytes",
