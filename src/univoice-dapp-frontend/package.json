@@ -14,8 +14,14 @@
     "@dfinity/agent": "^1.4.0",
     "@dfinity/candid": "^1.4.0",
     "@dfinity/principal": "^1.4.0",
+    "@lottiefiles/dotlottie-react": "^0.13.0",
+    "lodash": "^4.17.21",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-media-recorder-2": "1.6.23",
+    "react-router-dom": "^7.1.1",
+    "simple-zustand-devtools": "^1.1.0",
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
