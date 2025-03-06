@@ -206,4 +206,9 @@ async fn buy_nft_license(buyer: String, collection_id: String, quantity: u64) ->
     Ok((transaction_records, collection))
 }
 
+#[ic_cdk::query]
+fn set_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>) -> bool {
+    buss_types::set_invite_code(dapp_principal, wallet_principal)
+}
+
 ic_cdk::export_candid!();

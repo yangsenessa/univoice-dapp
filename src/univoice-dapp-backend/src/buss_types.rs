@@ -343,7 +343,18 @@ pub fn list_custom_info(page: u64, page_size: u64) -> Vec<CustomInfo> {
     })
 }
 
-
+pub fn set_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>) -> bool {
+    CUSTOM_INFO_SET.with(|store| {
+        let mut store = store.borrow();
+        for info in store.iter_mut() {
+            if info.wallet_principal == wallet_principal {
+                info.invite_code = invite_code;
+                return true;
+            }
+        }
+        false
+    })
+}
 
 
 
