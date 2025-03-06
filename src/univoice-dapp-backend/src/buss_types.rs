@@ -86,6 +86,8 @@ pub struct CustomInfo {
     pub wallet_principal: String,
     pub nick_name: String,
     pub logo: String,
+    pub is_invite_code_filled: bool,
+    pub invite_code: String,
 }
 
 impl Storable for CustomInfo {
@@ -266,8 +268,26 @@ pub fn get_custom_info(dapp_principal: Option<String>, wallet_principal: Option<
         for i in 0..store.len() {
             if let Some(info) = store.get(i) {
                 match (&dapp_principal, &wallet_principal) {
-                    (Some(dapp), _) if !info.dapp_principal.is_empty() && info.dapp_principal == *dapp => return Some(info),
-                    (_, Some(wallet)) if !info.wallet_principal.is_empty() && info.wallet_principal == *wallet => return Some(info),
+                    (Some(dapp), _) if !info.dapp_principal.is_empty() && info.dapp_principal == *dapp => {
+                        return Some( CustomInfo {
+                            dapp_principal: info.dapp_principal.clone(),
+                            wallet_principal: info.wallet_principal.clone(),
+                            nick_name: info.nick_name.clone(),
+                            logo: info.logo.clone(),
+                            is_invite_code_filled: !info.is_invite_code_filled.is_empty(),
+                            invite_code: info.invite_code.clone()
+                        });
+                    },
+                    (_, Some(wallet)) if !info.wallet_principal.is_empty() && info.wallet_principal == *wallet => {
+                        return Some(CustomInfo{
+                            dapp_principal: info.dapp_principal.clone(),
+                            wallet_principal: info.wallet_principal.clone(),
+                            nick_name: info.nick_name.clone(),
+                            logo: info.logo.clone(),
+                            is_invite_code_filled: !info.is_invite_code_filled.is_empty(),
+                            invite_code: info.invite_code.clone()
+                        })
+                    },
                     _ => continue,
                 }
             }
