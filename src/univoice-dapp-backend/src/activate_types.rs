@@ -10,6 +10,7 @@ use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromErro
 
 use std::cell::RefCell;
 use rand::Rng;
+use crate::constants::INVITE_REWARD;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 

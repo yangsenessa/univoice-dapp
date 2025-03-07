@@ -65,6 +65,7 @@ mod buss_types;
 mod activate_types;
 mod license_types;
 mod voice_types;
+mod constants;
 
 use candid::{CandidType, Principal};
 
