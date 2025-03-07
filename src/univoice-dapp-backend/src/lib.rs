@@ -64,6 +64,7 @@
 mod buss_types;
 mod activate_types;
 mod license_types;
+
 use candid::{CandidType, Principal};
 
 
@@ -75,9 +76,7 @@ use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, time::Duration};
 use license_types::{NFTCollection, UserLicenseRecord, UserNFTsRequest, UserNFTsResponse};
 
 #[ic_cdk::init]
-fn init() {
-
-}
+fn init() {}
 
 
 fn is_controller() -> Result<(), String> {
@@ -97,6 +96,7 @@ fn is_called_by_dapp_frontend() -> Result<(), String> {
         Err("caller is not the frontend canister".to_string())
     }
 }
+
 #[ic_cdk::update]
 async fn add_info_item(key: String, content: String) -> Result<(), String> {
     is_controller()?;
@@ -126,8 +126,29 @@ async fn update_info_item(key: String, content: String) -> Result<(), String> {
 }
 
 #[ic_cdk::update]
-async fn add_custom_info(info: buss_types::CustomInfo) -> Result<(), String> {
+async fn add_custom_info(mut info: buss_types::CustomInfo) -> Result<(), String> {
     is_called_by_dapp_frontend()?;
+
+    // initialization invite_code and is_invite_code_filled
+    let owner = if !info.wallet_principal.is_empty() {
+        info.wallet_principal.clone();
+    } else {
+        info.dapp_principal.clone();
+    };
+
+    if info.invite_code.is_empty() {
+        match active_types::create_invite_code(owner.clone()) {
+            Ok(invite_code) => {
+                info.invite_code = invite_code.code;
+            }
+
+            Err(err) => {
+                return Err(format!("Failed to generate invite code: {}", err));
+            }
+        }
+    }
+    info.is_invite_code_filled = !info.used_invite_code.is_empty();
+
     buss_types::add_custom_info(info)
 }
 
@@ -179,12 +200,12 @@ fn verify_invite_code(code: String) -> Option<activate_types::InviteCode> {
 #[ic_cdk::update]
 async fn get_user_nfts(req: UserNFTsRequest) -> Result<UserNFTsResponse, String> {
     is_called_by_dapp_frontend()?;
-    
+
     let principal = Principal::from_text(&req.user)
         .map_err(|e| format!("Invalid user principal: {}", e))?;
 
     let holdings = license_types::get_all_user_nfts(principal, req.license_ids).await?;
-    
+
     Ok(UserNFTsResponse { holdings })
 }
 
@@ -196,19 +217,19 @@ async fn get_nft_collection(collection_id: String) -> Result<NFTCollection, Stri
 #[ic_cdk::update]
 async fn buy_nft_license(buyer: String, collection_id: String, quantity: u64) -> Result<(Vec<UserLicenseRecord>, NFTCollection), String> {
     is_called_by_dapp_frontend()?;
-    
+
     let buyer_principal = Principal::from_text(&buyer)
         .map_err(|e| format!("Invalid buyer principal: {}", e))?;
-        
+
     let transaction_records = license_types::buy_nft_license(&buyer, &collection_id, quantity).await?;
     let collection = license_types::get_nft_collection(&collection_id).await?;
-    
+
     Ok((transaction_records, collection))
 }
 
 #[ic_cdk::query]
-fn set_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>) -> bool {
-    buss_types::set_invite_code(dapp_principal, wallet_principal)
+fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>, used_invite_code: String) -> bool {
+    buss_types::submit_invite_code(dapp_principal, wallet_principal, used_invite_code)
 }
 
 ic_cdk::export_candid!();

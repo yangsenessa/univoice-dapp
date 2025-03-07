@@ -61,6 +61,9 @@ type CustomInfo = record {
     wallet_principal: text;
     nick_name: text;
     logo: text;
+    is_invite_code_filled: bool;
+    invite_code: text;
+    used_invite_code: opt text
 };
 
 type InviteCode = record {
@@ -103,7 +106,7 @@ service : {
     "get_custom_info": (opt text, opt text) -> (opt CustomInfo) query;
     "update_custom_info": (opt text, opt text, text, text) -> (variant { Ok; Err: text; });
     "list_custom_info": (nat64, nat64) -> (vec CustomInfo) query;
-    "set_invite_code": (opt text, opt text) -> (bool) query;
+    "submit_invite_code": (opt text, opt text, text) -> (bool) query;
 
     // Invite Code Management
     "create_invite_code": (owner: text) -> (variant { Ok: InviteCode; Err: text; });

@@ -1,3 +1,4 @@
+use std::borrow::{Borrow, BorrowMut};
 use candid::{CandidType, Deserialize};
 use serde::Serialize;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager,VirtualMemory};
@@ -88,6 +89,7 @@ pub struct CustomInfo {
     pub logo: String,
     pub is_invite_code_filled: bool,
     pub invite_code: String,
+    pub used_invite_code: Option<String>
 }
 
 impl Storable for CustomInfo {
@@ -244,6 +246,15 @@ pub fn add_custom_info(info: CustomInfo) -> Result<(), String> {
             if !info.nick_name.is_empty() {
                 existing_info.nick_name = info.nick_name;
             }
+
+            if existing_info.invite_code.is_empty() {
+                existing_info.invite_code = info.invite_code.clone();
+            }
+
+            if let Some(code) = info.used_invite_code.clone() {
+                existing_info.used_invite_code = Some(code);
+                existing_info.is_invite_code_filled = true;
+            }
             
             store.set(index, &existing_info);
             Ok(())
@@ -343,13 +354,23 @@ pub fn list_custom_info(page: u64, page_size: u64) -> Vec<CustomInfo> {
     })
 }
 
-pub fn set_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>) -> bool {
+pub fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>, used_invite_code: String) -> bool {
     CUSTOM_INFO_SET.with(|store| {
         let mut store = store.borrow();
+
         for info in store.iter_mut() {
-            if info.wallet_principal == wallet_principal {
-                info.invite_code = invite_code;
-                return true;
+            if let Some(wallet) = &wallet_principal {
+                if info.wallet_principal == *wallet {
+                    info.used_invite_code = Some(used_invite_code);
+                    info.is_invite_code_filled = true;
+                    return true;
+                }
+            } else if let Some(dapp) = &dapp_principal {
+                if info.dapp_principal == *dapp {
+                    info.used_invite_code = Some(used_invite_code);
+                    info.is_invite_code_filled = true;
+                    return true;
+                }
             }
         }
         false
