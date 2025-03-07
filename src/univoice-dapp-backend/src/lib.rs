@@ -76,6 +76,7 @@ use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, time::Duration};
 use ic_oss_can::types::FileMetadata;
 
 use license_types::{NFTCollection, UserLicenseRecord, UserNFTsRequest, UserNFTsResponse};
+use crate::buss_types::Quest;
 
 #[ic_cdk::init]
 fn init() {}
@@ -149,8 +150,9 @@ async fn add_custom_info(mut info: buss_types::CustomInfo) -> Result<(), String>
             }
         }
     }
-    info.is_invite_code_filled = !info.used_invite_code.is_empty();
 
+    info.is_invite_code_filled = !info.used_invite_code.is_empty();
+    info.total_rewards = 0;
     buss_types::add_custom_info(info)
 }
 
@@ -182,11 +184,11 @@ async fn use_invite_code(code: String, new_user: String) -> Result<activate_type
     activate_types::use_invite_code(code, new_user)
 }
 
-#[ic_cdk::update]
-async fn claim_reward(reward_id: String) -> Result<activate_types::InviteRewardRecord, String> {
-    is_called_by_dapp_frontend()?;
-    activate_types::claim_reward(reward_id).await
-}
+// #[ic_cdk::update]
+// async fn claim_reward(reward_id: String) -> Result<activate_types::InviteRewardRecord, String> {
+//     is_called_by_dapp_frontend()?;
+//     activate_types::claim_reward(reward_id).await
+// }
 
 #[ic_cdk::query]
 fn get_user_rewards(user_principal: String) -> Vec<activate_types::InviteRewardRecord> {
@@ -233,7 +235,7 @@ async fn buy_nft_license(buyer: String, collection_id: String, quantity: u64) ->
 fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>,
                       used_invite_code: String) -> bool {
     is_called_by_dapp_frontend()?;
-    buss_types::submit_invite_code(dapp_principal, wallet_principal, used_invite_code)
+    activate_types::submit_invite_code(dapp_principal, wallet_principal, used_invite_code)
 }
 
 #[ic_cdk::query]
@@ -255,5 +257,18 @@ fn delete_recording(dapp_principal: Option<String>, wallet_principal: Option<Str
     is_called_by_dapp_frontend()?;
     buss_types::delete_recording(dapp_principal, wallet_principal, file_id)
 }
+
+#[ic_cdk::query]
+fn get_quest_list(dapp_principal: Option<String>, wallet_principal: Option<String>) -> Vec<Quest> {
+    is_called_by_dapp_frontend()?;
+    activate_types::get_quest_list(dapp_principal, wallet_principal)
+}
+
+#[ic_cdk::update]
+fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<String>, quest_id: u64) -> bool {
+    is_called_by_dapp_frontend()?;
+    activate_types::claim_reward(dapp_principal, wallet_principal, quest_id)
+}
+
 
 ic_cdk::export_candid!();

@@ -63,7 +63,8 @@ type CustomInfo = record {
     logo: text;
     is_invite_code_filled: bool;
     invite_code: text;
-    used_invite_code: opt text
+    used_invite_code: opt text;
+    total_rewards: nat64;
 };
 
 type InviteCode = record {
@@ -104,6 +105,14 @@ type FileMetadata = record {
     hash: opt vec nat8;
 };
 
+type Quest = record {
+    task_id: nat64;
+    task_name: text;
+    reward_amount: nat64;
+    redirect_url: text;
+    is_completed: bool;
+};
+
 service : {
     // Common Info Management
     "add_info_item": (key: text, content: text) -> (variant { Ok; Err: text; });
@@ -117,12 +126,13 @@ service : {
     "get_custom_info": (opt text, opt text) -> (opt CustomInfo) query;
     "update_custom_info": (opt text, opt text, text, text) -> (variant { Ok; Err: text; });
     "list_custom_info": (nat64, nat64) -> (vec CustomInfo) query;
-    "submit_invite_code": (opt text, opt text, text) -> (bool);
 
     // Invite Code Management
     "create_invite_code": (owner: text) -> (variant { Ok: InviteCode; Err: text; });
     "use_invite_code": (code: text, new_user: text) -> (variant { Ok: InviteRewardRecord; Err: text; });
-    "claim_reward": (reward_id: text) -> (variant { Ok: InviteRewardRecord; Err: text; });
+    "submit_invite_code": (opt text, opt text, text) -> (bool);
+//    "claim_reward": (reward_id: text) -> (variant { Ok: InviteRewardRecord; Err: text; });
+    "claim_reward": (opt text, opt text, nat64) -> (bool);
     "get_user_rewards": (user_principal: text) -> (vec InviteRewardRecord) query;
     "verify_invite_code": (code: text) -> (opt InviteCode) query;
     // NFT Management
@@ -130,8 +140,11 @@ service : {
     "get_nft_collection": (collection_id: text) -> (variant { Ok: NFTCollection; Err: text; });
     "buy_nft_license": (buyer: text, collection_id: text, quantity: nat64) -> (LicenseFetchResult);
 
-    // Record
+    // Recording
     "get_recording_files": (opt text, opt text) -> (vec FileMetadata) query;
     "upload_recording": (opt text, opt text, text, text, vec nat8) -> (bool);
     "delete_recording": (opt text, opt text, text) -> (bool);
+
+    // Quests
+    "get_quest_list": (opt text, opt text) -> (vec Quest) query;
 };

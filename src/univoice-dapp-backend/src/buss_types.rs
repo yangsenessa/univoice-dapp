@@ -94,6 +94,7 @@ pub struct CustomInfo {
     pub is_invite_code_filled: bool,
     pub invite_code: String,
     pub used_invite_code: Option<String>,
+    pub total_rewards: u64,
 }
 
 impl Storable for CustomInfo {
@@ -261,6 +262,10 @@ pub fn add_custom_info(info: CustomInfo) -> Result<(), String> {
                 existing_info.is_invite_code_filled = true;
             }
 
+            if existing_info.total_rewards == 0 {
+                existing_info.total_rewards = info.total_rewards;
+            }
+
             store.set(index, &existing_info);
             Ok(())
         })
@@ -356,29 +361,6 @@ pub fn list_custom_info(page: u64, page_size: u64) -> Vec<CustomInfo> {
         (start..end)
             .filter_map(|i| store.get(i))
             .collect()
-    })
-}
-
-pub fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>, used_invite_code: String) -> bool {
-    CUSTOM_INFO_SET.with(|store| {
-        let mut store = store.borrow();
-
-        for info in store.iter_mut() {
-            if let Some(wallet) = &wallet_principal {
-                if info.wallet_principal == *wallet {
-                    info.used_invite_code = Some(used_invite_code);
-                    info.is_invite_code_filled = true;
-                    return true;
-                }
-            } else if let Some(dapp) = &dapp_principal {
-                if info.dapp_principal == *dapp {
-                    info.used_invite_code = Some(used_invite_code);
-                    info.is_invite_code_filled = true;
-                    return true;
-                }
-            }
-        }
-        false
     })
 }
 
