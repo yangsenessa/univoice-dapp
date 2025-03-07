@@ -1,19 +1,23 @@
 use std::borrow::{Borrow, BorrowMut};
 use candid::{CandidType, Deserialize};
 use serde::Serialize;
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager,VirtualMemory};
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, Storable, StableBTreeMap, StableVec, storable::Bound};
 use std::cell::RefCell;
+use std::fs;
+use ic_oss_can::types::FileMetadata;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 #[derive(Clone, CandidType, Deserialize, Serialize)]
 pub struct CommonInfoCfg {
-    pub key: String,     // Unique identifier for the common info configuration
+    pub key: String,
+    // Unique identifier for the common info configuration
     pub content: String,
     pub version: String,
     pub isvalid: bool,
 }
+
 impl Storable for CommonInfoCfg {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
         let serialized = candid::encode_one(self).expect("Failed to serialize CommonInfoCfg");
@@ -44,7 +48,7 @@ impl CommonInfoCfg {
         self.isvalid
     }
 
-    
+
     pub fn get_info_version(&self) -> &str {
         &self.version
     }
@@ -89,7 +93,7 @@ pub struct CustomInfo {
     pub logo: String,
     pub is_invite_code_filled: bool,
     pub invite_code: String,
-    pub used_invite_code: Option<String>
+    pub used_invite_code: Option<String>,
 }
 
 impl Storable for CustomInfo {
@@ -146,9 +150,9 @@ pub fn add_info_item(key: String, content: String) -> Result<(), String> {
     COMMON_INFO_MAP.with(|store| {
         let mut store = store.borrow_mut();
         let info = CommonInfoCfg::create_info(key.clone(), content);
-        
+
         // Since COMMON_INFO_MAP is a StableBTreeMap, we can directly use insert
-        store.insert(key, info);      
+        store.insert(key, info);
         Ok(())
     })
 }
@@ -193,7 +197,7 @@ pub fn batch_get_info(keys: Vec<String>) -> Vec<Option<CommonInfoCfg>> {
 pub fn update_info_item(key: String, content: String) -> Result<(), String> {
     COMMON_INFO_MAP.with(|store| {
         let mut store = store.borrow_mut();
-        
+
         if let Some(mut existing_info) = store.get(&key) {
             if !existing_info.check_validity() {
                 return Err("Info item is not valid".to_string());
@@ -206,6 +210,7 @@ pub fn update_info_item(key: String, content: String) -> Result<(), String> {
         }
     })
 }
+
 /** -------------------------------custom info--------------------------------- */
 pub fn find_custom_info_index(dapp_principal: &str, wallet_principal: &str) -> Option<u64> {
     CUSTOM_INFO_SET.with(|store| {
@@ -213,7 +218,7 @@ pub fn find_custom_info_index(dapp_principal: &str, wallet_principal: &str) -> O
         for i in 0..store.len() {
             if let Some(info) = store.get(i) {
                 if (!info.dapp_principal.is_empty() && info.dapp_principal == dapp_principal) ||
-                   (!info.wallet_principal.is_empty() && info.wallet_principal == wallet_principal) {
+                    (!info.wallet_principal.is_empty() && info.wallet_principal == wallet_principal) {
                     return Some(i);
                 }
             }
@@ -235,7 +240,7 @@ pub fn add_custom_info(info: CustomInfo) -> Result<(), String> {
             let mut store = store.borrow_mut();
             let mut existing_info = store.get(index)
                 .ok_or("Failed to get existing custom info")?;
-            
+
             // Update modifiable fields
             if !info.wallet_principal.is_empty() {
                 existing_info.wallet_principal = info.wallet_principal;
@@ -255,7 +260,7 @@ pub fn add_custom_info(info: CustomInfo) -> Result<(), String> {
                 existing_info.used_invite_code = Some(code);
                 existing_info.is_invite_code_filled = true;
             }
-            
+
             store.set(index, &existing_info);
             Ok(())
         })
@@ -280,25 +285,25 @@ pub fn get_custom_info(dapp_principal: Option<String>, wallet_principal: Option<
             if let Some(info) = store.get(i) {
                 match (&dapp_principal, &wallet_principal) {
                     (Some(dapp), _) if !info.dapp_principal.is_empty() && info.dapp_principal == *dapp => {
-                        return Some( CustomInfo {
+                        return Some(CustomInfo {
                             dapp_principal: info.dapp_principal.clone(),
                             wallet_principal: info.wallet_principal.clone(),
                             nick_name: info.nick_name.clone(),
                             logo: info.logo.clone(),
                             is_invite_code_filled: !info.is_invite_code_filled.is_empty(),
-                            invite_code: info.invite_code.clone()
+                            invite_code: info.invite_code.clone(),
                         });
-                    },
+                    }
                     (_, Some(wallet)) if !info.wallet_principal.is_empty() && info.wallet_principal == *wallet => {
-                        return Some(CustomInfo{
+                        return Some(CustomInfo {
                             dapp_principal: info.dapp_principal.clone(),
                             wallet_principal: info.wallet_principal.clone(),
                             nick_name: info.nick_name.clone(),
                             logo: info.logo.clone(),
                             is_invite_code_filled: !info.is_invite_code_filled.is_empty(),
-                            invite_code: info.invite_code.clone()
-                        })
-                    },
+                            invite_code: info.invite_code.clone(),
+                        });
+                    }
                     _ => continue,
                 }
             }
@@ -342,12 +347,12 @@ pub fn list_custom_info(page: u64, page_size: u64) -> Vec<CustomInfo> {
         let store = store.borrow();
         let start = page * page_size;
         let end = std::cmp::min(start + page_size, store.len());
-        
+
         // Check if start is within bounds
         if start >= store.len() {
             return Vec::new();
         }
-        
+
         (start..end)
             .filter_map(|i| store.get(i))
             .collect()
@@ -377,5 +382,83 @@ pub fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Opti
     })
 }
 
+pub fn get_recording_files(dapp_principal: Option<String>, wallet_principal: Option<String>) -> Vec<FileMetadata> {
+    if dapp_principal.is_none() && wallet_principal.is_none() {
+        ic_cdk::trap("Either dapp_principal or wallet_principal must be provided");
+    }
 
+    let caller_principal = ic_cdk::caller().to_string();
+    let dapp_principal = dapp_principal.unwrap_or_else(|| caller_principal.clone());
+    let wallet_principal = wallet_principal.unwrap_or_else(|| caller_principal.clone());
+
+    let all_files = fs::list_files();
+    let recording_extensions = vec!["wav", "mp3", "m4a"];
+    let user_recordings: Vec<FileMetadata> = all_files.into_iter()
+        .filter(|file| {
+            let file_extension = file.name.split('.').last().unwrap_or("").to_lowercase();
+            (file.owner == dapp_principal || file.owner == wallet_principal)
+                && recording_extensions.contains(&file_extension.as_str())
+        })
+        .collect();
+
+    user_recordings
+}
+
+pub fn upload_recording(dapp_principal: Option<String>, wallet_principal: Option<String>, file_name: String,
+                        content_type: String, file_data: Vec<u8>) -> bool {
+    if dapp_principal.is_none() && wallet_principal.is_none() {
+        ic_cdk::trap("Either dapp_principal or wallet_principal must be provided");
+    }
+
+    let caller_principal = ic_cdk::caller().to_string();
+    let owner = wallet_principal
+        .clone()
+        .unwrap_or_else(|| dapp_principal.clone().unwrap_or(caller_principal));
+    match fs::store_file(file_name.clone(), content_type.clone(), file_data.clone()) {
+        Ok(file_id) => {
+            ic_cdk::println!("Record upload successful: {:?}, FileId: {:?}", file_name, file_id);
+            true
+        }
+        Err(err) => {
+            ic_cdk::println!("Record upload fail: {:?}, Error: {:?}", file_name, err);
+            false
+        }
+    }
+}
+
+pub fn delete_recording(dapp_principal: Option<String>, wallet_principal: Option<String>,
+                        file_id: String) -> bool {
+    if dapp_principal.is_none() && wallet_principal.is_none() {
+        ic_cdk::trap("Either dapp_principal or wallet_principal must be provided");
+    }
+
+    let caller_principal = ic_cdk::caller().to_string();
+    let owner = wallet_principal
+        .clone()
+        .unwrap_or_else(|| dapp_principal.clone().unwrap_or(caller_principal));
+
+    match fs::get_file_metadata(file_id.clone()) {
+        Ok(file_metadata) => {
+            if file_metadata.owner != owner {
+                ic_cdk::println!("No permission to delete this recording file: {:?}", file_id);
+                return false;
+            }
+
+            match fs::delete_file(FileId(file_id.clone())) {
+                Ok(_) => {
+                    ic_cdk::println!("Recording file deleted successfully: {:?}", file_id);
+                    true
+                }
+                Err(err) => {
+                    ic_cdk::println!("Failed to delete the recording file: {:?}, Error: {:?}", file_id, err);
+                    false
+                }
+            }
+        }
+        Err(_) => {
+            ic_cdk::println!("File does not exist: {:?}", file_id);
+            false
+        }
+    }
+}
 

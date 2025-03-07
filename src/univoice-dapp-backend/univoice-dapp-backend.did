@@ -93,6 +93,17 @@ type LicenseFetchResult = variant {
     Err: text;
 };
 
+type FileMetadata = record {
+    name: text;
+    content_type: text;
+    size: nat64;
+    filled: nat64;
+    created_at: nat64;
+    updated_at: nat64;
+    chunks: nat32;
+    hash: opt vec nat8;
+};
+
 service : {
     // Common Info Management
     "add_info_item": (key: text, content: text) -> (variant { Ok; Err: text; });
@@ -106,7 +117,7 @@ service : {
     "get_custom_info": (opt text, opt text) -> (opt CustomInfo) query;
     "update_custom_info": (opt text, opt text, text, text) -> (variant { Ok; Err: text; });
     "list_custom_info": (nat64, nat64) -> (vec CustomInfo) query;
-    "submit_invite_code": (opt text, opt text, text) -> (bool) query;
+    "submit_invite_code": (opt text, opt text, text) -> (bool);
 
     // Invite Code Management
     "create_invite_code": (owner: text) -> (variant { Ok: InviteCode; Err: text; });
@@ -118,4 +129,9 @@ service : {
     "get_user_nfts": (UserNFTsRequest) -> (variant { Ok: UserNFTsResponse; Err: text; });
     "get_nft_collection": (collection_id: text) -> (variant { Ok: NFTCollection; Err: text; });
     "buy_nft_license": (buyer: text, collection_id: text, quantity: nat64) -> (LicenseFetchResult);
+
+    // Record
+    "get_recording_files": (opt text, opt text) -> (vec FileMetadata) query;
+    "upload_recording": (opt text, opt text, text, text, vec nat8) -> (bool);
+    "delete_recording": (opt text, opt text, text) -> (bool);
 };

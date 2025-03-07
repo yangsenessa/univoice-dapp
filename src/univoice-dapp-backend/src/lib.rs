@@ -64,6 +64,7 @@
 mod buss_types;
 mod activate_types;
 mod license_types;
+mod voice_types;
 
 use candid::{CandidType, Principal};
 
@@ -72,6 +73,7 @@ use rand::{rngs::StdRng, RngCore, SeedableRng};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, time::Duration};
+use ic_oss_can::types::FileMetadata;
 
 use license_types::{NFTCollection, UserLicenseRecord, UserNFTsRequest, UserNFTsResponse};
 
@@ -227,9 +229,31 @@ async fn buy_nft_license(buyer: String, collection_id: String, quantity: u64) ->
     Ok((transaction_records, collection))
 }
 
-#[ic_cdk::query]
-fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>, used_invite_code: String) -> bool {
+#[ic_cdk::update]
+fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>,
+                      used_invite_code: String) -> bool {
+    is_called_by_dapp_frontend()?;
     buss_types::submit_invite_code(dapp_principal, wallet_principal, used_invite_code)
+}
+
+#[ic_cdk::query]
+fn get_recording_files(dapp_principal: Option<String>, wallet_principal: Option<String>) -> Vec<FileMetadata> {
+    is_called_by_dapp_frontend()?;
+    buss_types::get_recording_files(dapp_principal, wallet_principal);
+}
+
+#[ic_cdk::update]
+fn upload_recording(dapp_principal: Option<String>, wallet_principal: Option<String>, file_name: String,
+                    content_type: String, file_data: Vec<u8>) -> bool {
+    is_called_by_dapp_frontend()?;
+    buss_types::upload_recording(dapp_principal, wallet_principal, file_name, content_type, file_data)
+}
+
+#[ic_cdk::update]
+fn delete_recording(dapp_principal: Option<String>, wallet_principal: Option<String>,
+                    file_id: String) -> bool {
+    is_called_by_dapp_frontend()?;
+    buss_types::delete_recording(dapp_principal, wallet_principal, file_id)
 }
 
 ic_cdk::export_candid!();
