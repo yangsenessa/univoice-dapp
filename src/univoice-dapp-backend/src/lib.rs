@@ -66,6 +66,8 @@ mod activate_types;
 mod license_types;
 mod voice_types;
 mod constants;
+mod ic_oss;
+mod ic_oss_dapp;
 
 use candid::{CandidType, Principal};
 
@@ -77,7 +79,7 @@ use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, time::Duration};
 use ic_oss_can::types::FileMetadata;
 
 use license_types::{NFTCollection, UserLicenseRecord, UserNFTsRequest, UserNFTsResponse};
-use crate::buss_types::Quest;
+use crate::activate_types::Quest;
 
 #[ic_cdk::init]
 fn init() {}
@@ -240,26 +242,6 @@ fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<S
 }
 
 #[ic_cdk::query]
-fn get_recording_files(dapp_principal: Option<String>, wallet_principal: Option<String>) -> Vec<FileMetadata> {
-    is_called_by_dapp_frontend()?;
-    buss_types::get_recording_files(dapp_principal, wallet_principal);
-}
-
-#[ic_cdk::update]
-fn upload_recording(dapp_principal: Option<String>, wallet_principal: Option<String>, file_name: String,
-                    content_type: String, file_data: Vec<u8>) -> bool {
-    is_called_by_dapp_frontend()?;
-    buss_types::upload_recording(dapp_principal, wallet_principal, file_name, content_type, file_data)
-}
-
-#[ic_cdk::update]
-fn delete_recording(dapp_principal: Option<String>, wallet_principal: Option<String>,
-                    file_id: String) -> bool {
-    is_called_by_dapp_frontend()?;
-    buss_types::delete_recording(dapp_principal, wallet_principal, file_id)
-}
-
-#[ic_cdk::query]
 fn get_quest_list(dapp_principal: Option<String>, wallet_principal: Option<String>) -> Vec<Quest> {
     is_called_by_dapp_frontend()?;
     activate_types::get_quest_list(dapp_principal, wallet_principal)
@@ -271,5 +253,16 @@ fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<String>
     activate_types::claim_reward(dapp_principal, wallet_principal, quest_id)
 }
 
+#[ic_cdk::update]
+fn attach_policy(cluster_id: String, principal_id: String, resource: String) -> Result<(), String> {
+    is_called_by_dapp_frontend()?;
+    ic_oss_dapp::attach_policy(&cluster_id, &principal_id, &resource)
+}
+
+#[ic_cdk::update]
+fn detach_policy(cluster_id: String, principal_id: String, resource: String) -> Result<(), String> {
+    is_called_by_dapp_frontend()?;
+    ic_oss_dapp::detach_policy(&cluster_id, &principal_id, &resource)
+}
 
 ic_cdk::export_candid!();

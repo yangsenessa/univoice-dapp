@@ -113,6 +113,11 @@ type Quest = record {
     is_completed: bool;
 };
 
+type PolicyResult = variant {
+    Ok: null;
+    Err: text
+};
+
 service : {
     // Common Info Management
     "add_info_item": (key: text, content: text) -> (variant { Ok; Err: text; });
@@ -140,11 +145,10 @@ service : {
     "get_nft_collection": (collection_id: text) -> (variant { Ok: NFTCollection; Err: text; });
     "buy_nft_license": (buyer: text, collection_id: text, quantity: nat64) -> (LicenseFetchResult);
 
-    // Recording
-    "get_recording_files": (opt text, opt text) -> (vec FileMetadata) query;
-    "upload_recording": (opt text, opt text, text, text, vec nat8) -> (bool);
-    "delete_recording": (opt text, opt text, text) -> (bool);
-
     // Quests
     "get_quest_list": (opt text, opt text) -> (vec Quest) query;
+
+    //ic_oss
+    "attach_policy": (text, text, text) -> (PolicyResult);
+    "detach_policy": (text, text, text) -> (PolicyResult);
 };
