@@ -6,6 +6,8 @@ use ic_stable_structures::{DefaultMemoryImpl, Storable, StableBTreeMap, StableVe
 use std::cell::RefCell;
 use std::fs;
 use ic_oss_can::types::FileMetadata;
+use crate::constants::INVITE_REWARD;
+use std::option::Option;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -97,6 +99,15 @@ pub struct CustomInfo {
     pub total_rewards: u64,
 }
 
+#[derive(Clone, CandidType, Deserialize, Serialize)]
+pub struct Quest {
+    pub quest_id: u64,
+    pub quest_name: String,
+    pub reward_amount: u64,
+    pub redirect_url: String,
+    pub is_completed: bool,
+}
+
 impl Storable for CustomInfo {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
         let serialized = candid::encode_one(self).expect("Failed to serialize CustomInfo");
@@ -120,6 +131,10 @@ impl CustomInfo {
             wallet_principal,
             nick_name,
             logo,
+            is_invite_code_filled: false,
+            invite_code: "".to_string(),
+            used_invite_code: None,
+            total_rewards: 0,
         }
     }
 
@@ -145,6 +160,23 @@ thread_local! {
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1)))
         ).unwrap()
     );
+
+    static QUESTS: RefCell<Vec<Quest>> = RefCell::new(vec![
+        Quest {
+            quest_id: 1,
+            quest_name: "Follow Twitter".to_string(),
+            reward_amount: 5000,
+            redirect_url: "https://twitter.com/official".to_string(),
+            is_completed: false,
+        },
+        Quest {
+            quest_id: 2,
+            quest_name: "Join Telegram".to_string(),
+            reward_amount: 3000,
+            redirect_url: "https://t.me/official".to_string(),
+            is_completed: false,
+        },
+    ]);
 }
 
 pub fn add_info_item(key: String, content: String) -> Result<(), String> {
@@ -295,8 +327,10 @@ pub fn get_custom_info(dapp_principal: Option<String>, wallet_principal: Option<
                             wallet_principal: info.wallet_principal.clone(),
                             nick_name: info.nick_name.clone(),
                             logo: info.logo.clone(),
-                            is_invite_code_filled: !info.is_invite_code_filled.is_empty(),
+                            is_invite_code_filled: info.is_invite_code_filled,
                             invite_code: info.invite_code.clone(),
+                            used_invite_code: info.used_invite_code.clone(),
+                            total_rewards: info.total_rewards,
                         });
                     }
                     (_, Some(wallet)) if !info.wallet_principal.is_empty() && info.wallet_principal == *wallet => {
@@ -305,8 +339,10 @@ pub fn get_custom_info(dapp_principal: Option<String>, wallet_principal: Option<
                             wallet_principal: info.wallet_principal.clone(),
                             nick_name: info.nick_name.clone(),
                             logo: info.logo.clone(),
-                            is_invite_code_filled: !info.is_invite_code_filled.is_empty(),
+                            is_invite_code_filled: info.is_invite_code_filled,
                             invite_code: info.invite_code.clone(),
+                            used_invite_code: info.used_invite_code.clone(),
+                            total_rewards: info.total_rewards,
                         });
                     }
                     _ => continue,
@@ -364,3 +400,111 @@ pub fn list_custom_info(page: u64, page_size: u64) -> Vec<CustomInfo> {
     })
 }
 
+pub fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>, used_invite_code: String) -> bool {
+    if dapp_principal.is_none() && wallet_principal.is_none() {
+        ic_cdk::trap("Either dapp_principal or wallet_principal must be provided");
+    }
+
+    let caller_principal = ic_cdk::caller().to_string();
+    let user_principal = wallet_principal
+        .clone()
+        .unwrap_or_else(|| dapp_principal.clone().unwrap_or(caller_principal));
+
+    CUSTOM_INFO_SET.with(|store| {
+        let mut store = store.borrow_mut();
+        let len = store.len();
+
+        for i in 0..len {
+            if let Some(mut info) = store.get(i).map(|v| v.clone()) {
+                if info.wallet_principal == user_principal || info.dapp_principal == user_principal {
+                    if info.is_invite_code_filled {
+                        ic_cdk::println!(
+                            "Invitation code has already been entered, unable to claim the reward again.: {:?}",
+                            user_principal
+                        );
+                        return false;
+                    }
+
+                    info.used_invite_code = Some(used_invite_code.clone());
+                    info.is_invite_code_filled = true;
+                    info.total_rewards += INVITE_REWARD;
+                    store.set(i, &info);
+
+                    ic_cdk::println!(
+                        "User {:?} invitation code submitted successfully，reward {:?}",
+                        user_principal, INVITE_REWARD
+                    );
+
+                    return true;
+                }
+            }
+        }
+
+        ic_cdk::println!("User not found, unable to enter the invitation code: {:?}", user_principal);
+        false
+    })
+}
+
+pub fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<String>,
+                    quest_id: u64) -> bool {
+    if dapp_principal.is_none() && wallet_principal.is_none() {
+        ic_cdk::trap("Either dapp_principal or wallet_principal must be provided");
+    }
+
+    let caller_principal = ic_cdk::caller().to_string();
+    let user_principal = wallet_principal
+        .clone()
+        .unwrap_or_else(|| dapp_principal.clone().unwrap_or(caller_principal));
+
+    let quest = QUESTS.with(|quests| {
+        let quests = quests.borrow();
+        quests.iter().find(|q| q.quest_id == quest_id).cloned()
+    });
+
+    if quest.is_none() {
+        ic_cdk::println!("Quest does not exist: {:?}", quest_id);
+        return false;
+    }
+
+    let mut quest = quest.unwrap();
+
+    if quest.is_completed {
+        ic_cdk::println!("Quest is completed and cannot be claimed again: {:?}", quest_id);
+        return false;
+    }
+
+    let reward_amount = quest.reward_amount;
+
+    quest.is_completed = true;
+    CUSTOM_INFO_SET.with(|store| {
+        let mut store = store.borrow_mut();
+        let len = store.len();
+
+        for i in 0..len {
+            if let Some(mut info) = store.get(i).map(|v| v.clone()) {
+                if info.wallet_principal == user_principal || info.dapp_principal == user_principal {
+                    info.total_rewards += reward_amount;
+
+                    store.set(i, &info);
+
+                    ic_cdk::println!(
+                        "User {:?} claim quest {:?} reward: {:?}",
+                        user_principal, quest_id, reward_amount
+                    );
+                    return true;
+                }
+            }
+        }
+
+        ic_cdk::println!("User not found, unable to claim the reward.: {:?}", user_principal);
+        false
+    })
+}
+
+pub fn get_quest_list(dapp_principal: Option<String>, wallet_principal: Option<String>) -> Vec<Quest> {
+    if dapp_principal.is_none() && wallet_principal.is_none() {
+        ic_cdk::trap("Either dapp_principal or wallet_principal must be provided");
+    }
+
+    QUESTS.with(|quests| quests.borrow().clone())
+}

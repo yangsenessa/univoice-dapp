@@ -79,7 +79,12 @@ use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, time::Duration};
 use ic_oss_can::types::FileMetadata;
 
 use license_types::{NFTCollection, UserLicenseRecord, UserNFTsRequest, UserNFTsResponse};
-use crate::activate_types::Quest;
+use crate::buss_types::Quest;
+use ic_oss_types::file::{
+    CreateFileInput, CreateFileOutput, FileInfo, UpdateFileChunkInput,
+    UpdateFileChunkOutput, UpdateFileInput, UpdateFileOutput,
+};
+use crate::ic_oss::{LoadModelInput, State};
 
 #[ic_cdk::init]
 fn init() {}
@@ -137,13 +142,13 @@ async fn add_custom_info(mut info: buss_types::CustomInfo) -> Result<(), String>
 
     // initialization invite_code and is_invite_code_filled
     let owner = if !info.wallet_principal.is_empty() {
-        info.wallet_principal.clone();
+        info.wallet_principal.clone()
     } else {
-        info.dapp_principal.clone();
+        info.dapp_principal.clone()
     };
 
     if info.invite_code.is_empty() {
-        match active_types::create_invite_code(owner.clone()) {
+        match activate_types::create_invite_code(owner.clone()) {
             Ok(invite_code) => {
                 info.invite_code = invite_code.code;
             }
@@ -154,7 +159,7 @@ async fn add_custom_info(mut info: buss_types::CustomInfo) -> Result<(), String>
         }
     }
 
-    info.is_invite_code_filled = !info.used_invite_code.is_empty();
+    info.is_invite_code_filled = info.used_invite_code.as_ref().map_or(false, |code| !code.is_empty());
     info.total_rewards = 0;
     buss_types::add_custom_info(info)
 }
@@ -237,32 +242,45 @@ async fn buy_nft_license(buyer: String, collection_id: String, quantity: u64) ->
 #[ic_cdk::update]
 fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>,
                       used_invite_code: String) -> bool {
-    is_called_by_dapp_frontend()?;
-    activate_types::submit_invite_code(dapp_principal, wallet_principal, used_invite_code)
+    if is_called_by_dapp_frontend().is_err() {
+        ic_cdk::println!("Unauthorized access attempt detected.");
+        return false;
+    }
+
+    buss_types::submit_invite_code(dapp_principal, wallet_principal, used_invite_code)
 }
 
 #[ic_cdk::query]
 fn get_quest_list(dapp_principal: Option<String>, wallet_principal: Option<String>) -> Vec<Quest> {
-    is_called_by_dapp_frontend()?;
-    activate_types::get_quest_list(dapp_principal, wallet_principal)
+    if is_called_by_dapp_frontend().is_err() {
+        ic_cdk::println!("Unauthorized access attempt detected.");
+        return vec![];
+    }
+    buss_types::get_quest_list(dapp_principal, wallet_principal)
 }
 
 #[ic_cdk::update]
 fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<String>, quest_id: u64) -> bool {
-    is_called_by_dapp_frontend()?;
-    activate_types::claim_reward(dapp_principal, wallet_principal, quest_id)
+    if is_called_by_dapp_frontend().is_err() {
+        ic_cdk::println!("Unauthorized access attempt detected.");
+        return false;
+    }
+
+    buss_types::claim_reward(dapp_principal, wallet_principal, quest_id)
 }
 
 #[ic_cdk::update]
 fn attach_policy(cluster_id: String, principal_id: String, resource: String) -> Result<(), String> {
     is_called_by_dapp_frontend()?;
-    ic_oss_dapp::attach_policy(&cluster_id, &principal_id, &resource)
+    ic_oss_dapp::attach_policy(&cluster_id, &principal_id, &resource);
+    Ok(())
 }
 
 #[ic_cdk::update]
 fn detach_policy(cluster_id: String, principal_id: String, resource: String) -> Result<(), String> {
     is_called_by_dapp_frontend()?;
-    ic_oss_dapp::detach_policy(&cluster_id, &principal_id, &resource)
+    ic_oss_dapp::detach_policy(&cluster_id, &principal_id, &resource);
+    Ok(())
 }
 
 ic_cdk::export_candid!();

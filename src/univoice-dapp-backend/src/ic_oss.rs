@@ -201,7 +201,6 @@ fn admin_load_model(args: LoadModelInput) -> Result<u64, String> {
     Ok(ic_cdk::api::performance_counter(1))
 }
 
-#[ic_cdk::init]
 fn init() {
     init_rand();
 }
@@ -246,5 +245,3 @@ fn is_controller_or_manager() -> Result<(), String> {
         Err("user is not a controller or manager".to_string())
     }
 }
-
-ic_cdk::export_candid!();

@@ -10,7 +10,6 @@ use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromErro
 
 use std::cell::RefCell;
 use rand::Rng;
-use crate::constants::INVITE_REWARD;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -33,15 +32,6 @@ pub struct InviteRewardRecord {
     pub created_at: u64,
     pub is_claimed: bool,
     pub claimed_at: Option<u64>,
-}
-
-#[derive(Clone, CandidType, Deserialize, Serialize)]
-pub struct Quest {
-    pub task_id: u64,
-    pub task_name: String,
-    pub reward_amount: u64,
-    pub redirect_url: String,
-    pub is_completed: bool,
 }
 
 impl Storable for InviteCode {
@@ -91,23 +81,6 @@ thread_local! {
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3)))
         )
     );
-
-    static QUESTS: RefCell<Vec<Quest>> = RefCell::new(vec![
-        Quest {
-            quest_id: 1,
-            quest_name: "Follow Twitter".to_string(),
-            reward_amount: 5000,
-            redirect_url: "https://twitter.com/official".to_string(),
-            is_completed: false,
-        },
-        Quest {
-            quest_id: 2,
-            quest_name: "Join Telegram".to_string(),
-            reward_amount: 3000,
-            redirect_url: "https://t.me/official".to_string(),
-            is_completed: false,
-        },
-    ]);
 }
 
 fn get_timestamp() -> u64 {
@@ -283,92 +256,3 @@ pub fn verify_invite_code(code: String) -> Option<InviteCode> {
         None
         })
 }
-
-pub fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>, used_invite_code: String) -> bool {
-    if dapp_principal.is_none() && wallet_principal.is_none() {
-        ic_cdk::trap("Either dapp_principal or wallet_principal must be provided");
-    }
-
-    let caller_principal = ic_cdk::caller().to_string();
-    let user_principal = wallet_principal
-        .clone()
-        .unwrap_or_else(|| dapp_principal.clone().unwrap_or(caller_principal));
-
-    CUSTOM_INFO_SET.with(|store| {
-        let mut store = store.borrow_mut();
-        for info in store.iter_mut() {
-            if info.wallet_principal == user_principal || info.dapp_principal == user_principal {
-                if info.is_invite_code_filled {
-                    ic_cdk::println!("Invitation code has already been entered, unable to claim the reward again.: {:?}",
-                                     user_principal);
-                    return false;
-                }
-
-                info.used_invite_code = Some(used_invite_code);
-                info.is_invite_code_filled = true;
-
-                info.total_rewards += INVITE_REWARD;
-                ic_cdk::println!("User {:?} invitation code submitted successfully，reward {:?}",
-                                 user_principal, INVITE_REWARD);
-
-                return true;
-            }
-        }
-        ic_cdk::println!("User not found, unable to enter the invitation code: {:?}", user_principal);
-        false
-    })
-}
-
-pub fn get_quest_list(dapp_principal: Option<String>, wallet_principal: Option<String>) -> Vec<Quest> {
-    if dapp_principal.is_none() && wallet_principal.is_none() {
-        ic_cdk::trap("Either dapp_principal or wallet_principal must be provided");
-    }
-
-    QUESTS.with(|quests| quests.borrow().clone())
-}
-
-pub fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<String>,
-                    quest_id: u64) -> bool {
-    if dapp_principal.is_none() && wallet_principal.is_none() {
-        ic_cdk::trap("Either dapp_principal or wallet_principal must be provided");
-    }
-
-    let caller_principal = ic_cdk::caller().to_string();
-    let user_principal = wallet_principal
-        .clone()
-        .unwrap_or_else(|| dapp_principal.clone().unwrap_or(caller_principal));
-
-    let quest = QUESTS.with(|quests| {
-        let quests = quests.borrow();
-        quests.iter().find(|q| q.quest_id == quest_id).cloned()
-    });
-
-    if quest.is_none() {
-        ic_cdk::println!("Quest does not exist: {:?}", quest_id);
-        return false;
-    }
-
-    let mut quest = quest.unwrap();
-
-    if quest.is_completed {
-        ic_cdk::println!("Quest is completed and cannot be claimed again: {:?}", quest_id);
-        return false;
-    }
-
-    let reward_amount = quest.reward_amount;
-
-    quest.is_completed = true;
-    CUSTOM_INFO_SET.with(|store| {
-        let mut store = store.borrow_mut();
-        for info in store.iter_mut() {
-            if info.wallet_principal == user_principal || info.dapp_principal == user_principal {
-                info.total_rewards += reward_amount;
-                ic_cdk::println!("User {:?} claim quest {:?} reward: {:?}", user_principal, quest_id, reward_amount);
-                return true;
-            }
-        }
-        ic_cdk::println!("User not found, unable to claim the reward.: {:?}", user_principal);
-        false
-    })
-}
-

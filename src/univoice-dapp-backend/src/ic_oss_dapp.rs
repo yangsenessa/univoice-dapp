@@ -1,7 +1,8 @@
-use ic_cdk::api::call::call;
-use ic_cdk::export::candid::{CandidType, Deserialize};
+use ic_cdk::api::call::call_raw128;
 use ic_cdk::api::management_canister::main::CanisterId;
-use serde::{Serialize};
+use candid::{CandidType};
+use serde::{Serialize, Deserialize};
+use serde_cbor;
 
 #[derive(Serialize, Deserialize)]
 pub struct Policy {
@@ -10,9 +11,9 @@ pub struct Policy {
     pub permissions: Vec<String>,
 }
 
-pub fn attach_policy(cluster_id: &str, principal_id: &str, resource: &str) -> Result<(), String> {
+pub async fn attach_policy(cluster_id: &str, principal_id: &str, resource: &str) -> Result<(), String> {
     let policy = Policy { principal_id: principal_id.to_string(), resource: resource.to_string(),
-        permissions: vec!["read".to_string(), "write".to_string()]};
+        permissions: vec!["read".to_string(), "write".to_string()] };
 
     let payload = serde_cbor::to_vec(&policy).map_err(|e| format!("Serialization error: {:?}", e))?;
 
@@ -21,15 +22,15 @@ pub fn attach_policy(cluster_id: &str, principal_id: &str, resource: &str) -> Re
 
     let method_name = "attach_policy";
 
-    match call_raw(canister_id, method_name, payload, 0) {
+    match call_raw128(canister_id, method_name, payload, 0).await {
         Ok(_) => Ok(()),
         Err(err) => Err(format!("Failed to attach policy: {:?}", err)),
     }
 }
 
-pub fn detach_policy(cluster_id: &str, principal_id: &str, resource: &str) -> Result<(), String> {
+pub async fn detach_policy(cluster_id: &str, principal_id: &str, resource: &str) -> Result<(), String> {
     let policy = Policy { principal_id: principal_id.to_string(), resource: resource.to_string(),
-        permissions: vec!["read".to_string(), "write".to_string()]};
+        permissions: vec!["read".to_string(), "write".to_string()] };
 
     let payload = serde_cbor::to_vec(&policy).map_err(|e| format!("Serialization error: {:?}", e))?;
 
@@ -38,7 +39,7 @@ pub fn detach_policy(cluster_id: &str, principal_id: &str, resource: &str) -> Re
 
     let method_name = "detach_policy";
 
-    match call_raw(canister_id, method_name, payload, 0) {
+    match call_raw128(canister_id, method_name, payload, 0).await {
         Ok(_) => Ok(()),
         Err(err) => Err(format!("Failed to detach policy: {:?}", err)),
     }
