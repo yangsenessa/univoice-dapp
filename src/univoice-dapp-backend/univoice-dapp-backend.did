@@ -106,8 +106,8 @@ type FileMetadata = record {
 };
 
 type Quest = record {
-    task_id: nat64;
-    task_name: text;
+    quest_id: nat64;
+    quest_name: text;
     reward_amount: nat64;
     redirect_url: text;
     is_completed: bool;

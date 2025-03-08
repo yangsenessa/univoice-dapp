@@ -456,26 +456,37 @@ pub fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<Str
         .clone()
         .unwrap_or_else(|| dapp_principal.clone().unwrap_or(caller_principal));
 
-    let quest = QUESTS.with(|quests| {
-        let quests = quests.borrow();
-        quests.iter().find(|q| q.quest_id == quest_id).cloned()
+    let mut found_quest = false;
+    QUESTS.with(|quests| {
+        let mut quests = quests.borrow_mut();
+        for quest in quests.iter_mut() {
+            if quest.quest_id == quest_id {
+                if quest.is_completed {
+                    ic_cdk::println!("Quest is already completed and cannot be claimed again: {:?}", quest_id);
+                    return;
+                }
+                quest.is_completed = true;
+                found_quest = true;
+                break;
+            }
+        }
     });
 
-    if quest.is_none() {
+    if !found_quest {
         ic_cdk::println!("Quest does not exist: {:?}", quest_id);
         return false;
     }
 
-    let mut quest = quest.unwrap();
+    let reward_amount = QUESTS.with(|quests| {
+        quests.borrow().iter().find(|q| q.quest_id == quest_id).map(|q| q.reward_amount)
+    });
 
-    if quest.is_completed {
-        ic_cdk::println!("Quest is completed and cannot be claimed again: {:?}", quest_id);
+    if reward_amount.is_none() {
+        ic_cdk::println!("Failed to get reward amount for quest {:?}", quest_id);
         return false;
     }
 
-    let reward_amount = quest.reward_amount;
-
-    quest.is_completed = true;
+    let reward_amount = reward_amount.unwrap();
     CUSTOM_INFO_SET.with(|store| {
         let mut store = store.borrow_mut();
         let len = store.len();
@@ -484,11 +495,10 @@ pub fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<Str
             if let Some(mut info) = store.get(i).map(|v| v.clone()) {
                 if info.wallet_principal == user_principal || info.dapp_principal == user_principal {
                     info.total_rewards += reward_amount;
-
                     store.set(i, &info);
 
                     ic_cdk::println!(
-                        "User {:?} claim quest {:?} reward: {:?}",
+                        "User {:?} claimed quest {:?} reward: {:?}",
                         user_principal, quest_id, reward_amount
                     );
                     return true;
@@ -496,7 +506,7 @@ pub fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<Str
             }
         }
 
-        ic_cdk::println!("User not found, unable to claim the reward.: {:?}", user_principal);
+        ic_cdk::println!("User not found, unable to claim the reward: {:?}", user_principal);
         false
     })
 }
