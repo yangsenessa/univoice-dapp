@@ -66,16 +66,18 @@ mod activate_types;
 mod license_types;
 mod voice_types;
 mod constants;
-mod ic_oss;
 mod ic_oss_dapp;
 
 use candid::{CandidType, Principal};
 
-
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use getrandom::Error;
+use rand::{RngCore, SeedableRng};
+use rand::rngs::SmallRng;
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, time::Duration};
+use std::borrow::BorrowMut;
 use ic_oss_can::types::FileMetadata;
 
 use license_types::{NFTCollection, UserLicenseRecord, UserNFTsRequest, UserNFTsResponse};
@@ -84,10 +86,30 @@ use ic_oss_types::file::{
     CreateFileInput, CreateFileOutput, FileInfo, UpdateFileChunkInput,
     UpdateFileChunkOutput, UpdateFileInput, UpdateFileOutput,
 };
-use crate::ic_oss::{LoadModelInput, State};
+
+thread_local! {
+    static RNG: RefCell<Option<SmallRng>> = RefCell::new(None);
+}
+
+pub fn init_rand() {
+    getrandom::register_custom_getrandom!(custom_getrandom);
+}
+
+fn custom_getrandom(buf: &mut [u8]) -> Result<(), Error> {
+    RNG.with(|mut rng| {
+        let mut rng = rng.borrow_mut();
+        if rng.is_none() {
+            *rng = Some(SmallRng::seed_from_u64(42));
+        }
+        rng.as_mut().unwrap().fill_bytes(buf);
+    });
+    Ok(())
+}
 
 #[ic_cdk::init]
-fn init() {}
+fn init() {
+    init_rand();
+}
 
 
 fn is_controller() -> Result<(), String> {
@@ -100,12 +122,13 @@ fn is_controller() -> Result<(), String> {
 }
 
 fn is_called_by_dapp_frontend() -> Result<(), String> {
-    let caller = ic_cdk::caller();
-    if caller.to_text() == "be2us-64aaa-aaaaa-qaabq-cai" {
-        Ok(())
-    } else {
-        Err("caller is not the frontend canister".to_string())
-    }
+    Ok(())
+    // let caller = ic_cdk::caller();
+    // if caller.to_text() == "be2us-64aaa-aaaaa-qaabq-cai" {
+    //     Ok(())
+    // } else {
+    //     Err("caller is not the frontend canister".to_string())
+    // }
 }
 
 #[ic_cdk::update]
@@ -272,14 +295,14 @@ fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<String>
 #[ic_cdk::update]
 fn attach_policy(cluster_id: String, principal_id: String, resource: String) -> Result<(), String> {
     is_called_by_dapp_frontend()?;
-    ic_oss_dapp::attach_policy(&cluster_id, &principal_id, &resource);
+    ic_oss_dapp::attach_policy(cluster_id, principal_id, resource);
     Ok(())
 }
 
 #[ic_cdk::update]
 fn detach_policy(cluster_id: String, principal_id: String, resource: String) -> Result<(), String> {
     is_called_by_dapp_frontend()?;
-    ic_oss_dapp::detach_policy(&cluster_id, &principal_id, &resource);
+    ic_oss_dapp::detach_policy(cluster_id, principal_id, resource);
     Ok(())
 }
 

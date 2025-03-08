@@ -21,6 +21,6 @@ serde = "1"
 serde_bytes = "0.11"
 serde_cbor = "0.11"
 getrandom = { version = "0.2", features = ["custom"] }
-rand = { version = "0.8", features = ["getrandom"] }
+rand = { version = "0.8", features = ["small_rng", "std_rng", "std"], default-features = false }
 ic-oss-types = "1.0.0"
 ic-oss-can = "1.0.0"

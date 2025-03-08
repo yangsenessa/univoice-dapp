@@ -11,7 +11,7 @@ pub struct Policy {
     pub permissions: Vec<String>,
 }
 
-pub async fn attach_policy(cluster_id: &str, principal_id: &str, resource: &str) -> Result<(), String> {
+pub async fn attach_policy(cluster_id: String, principal_id: String, resource: String) -> Result<(), String> {
     let policy = Policy { principal_id: principal_id.to_string(), resource: resource.to_string(),
         permissions: vec!["read".to_string(), "write".to_string()] };
 
@@ -28,7 +28,7 @@ pub async fn attach_policy(cluster_id: &str, principal_id: &str, resource: &str)
     }
 }
 
-pub async fn detach_policy(cluster_id: &str, principal_id: &str, resource: &str) -> Result<(), String> {
+pub async fn detach_policy(cluster_id: String, principal_id: String, resource: String) -> Result<(), String> {
     let policy = Policy { principal_id: principal_id.to_string(), resource: resource.to_string(),
         permissions: vec!["read".to_string(), "write".to_string()] };
 
