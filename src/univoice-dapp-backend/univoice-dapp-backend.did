@@ -118,6 +118,19 @@ type PolicyResult = variant {
     Err: text
 };
 
+type InvitedUser = record {
+    dapp_principal: text;
+    wallet_principal: text;
+    nick_name : text;
+    logo : text;
+    reward_amount : nat64;
+};
+
+type InvitedUserResponse = record {
+    total_invited : nat64;
+    users : vec InvitedUser;
+};
+
 service : {
     // Common Info Management
     "add_info_item": (key: text, content: text) -> (variant { Ok; Err: text; });
@@ -131,6 +144,7 @@ service : {
     "get_custom_info": (opt text, opt text) -> (opt CustomInfo) query;
     "update_custom_info": (opt text, opt text, text, text) -> (variant { Ok; Err: text; });
     "list_custom_info": (nat64, nat64) -> (vec CustomInfo) query;
+    "get_invited_users": (opt text, opt text) -> (InvitedUserResponse) query;
 
     // Invite Code Management
     "create_invite_code": (owner: text) -> (variant { Ok: InviteCode; Err: text; });

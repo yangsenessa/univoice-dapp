@@ -1,1 +1,1 @@
-pub const INVITE_REWARD: u64 = 1000;
+pub const INVITE_REWARD: u64 = 5000;

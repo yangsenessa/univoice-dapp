@@ -81,7 +81,7 @@ use std::borrow::BorrowMut;
 use ic_oss_can::types::FileMetadata;
 
 use license_types::{NFTCollection, UserLicenseRecord, UserNFTsRequest, UserNFTsResponse};
-use crate::buss_types::Quest;
+use crate::buss_types::{InvitedUserResponse, Quest};
 use ic_oss_types::file::{
     CreateFileInput, CreateFileOutput, FileInfo, UpdateFileChunkInput,
     UpdateFileChunkOutput, UpdateFileInput, UpdateFileOutput,
@@ -304,6 +304,11 @@ fn detach_policy(cluster_id: String, principal_id: String, resource: String) -> 
     is_called_by_dapp_frontend()?;
     ic_oss_dapp::detach_policy(cluster_id, principal_id, resource);
     Ok(())
+}
+
+#[ic_cdk::query]
+fn get_invited_users(dapp_principal: Option<String>, wallet_principal: Option<String>) -> InvitedUserResponse {
+    buss_types::get_invited_users(dapp_principal, wallet_principal)
 }
 
 ic_cdk::export_candid!();

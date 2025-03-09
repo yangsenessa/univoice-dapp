@@ -8,6 +8,7 @@ use std::fs;
 use ic_oss_can::types::FileMetadata;
 use crate::constants::INVITE_REWARD;
 use std::option::Option;
+use std::collections::HashMap;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -108,6 +109,21 @@ pub struct Quest {
     pub is_completed: bool,
 }
 
+#[derive(Clone, CandidType, Deserialize, Serialize)]
+pub struct InvitedUser {
+    pub dapp_principal: String,
+    pub wallet_principal: String,
+    pub nick_name: String,
+    pub logo: String,
+    pub reward_amount: u64,
+}
+
+#[derive(Clone, CandidType, Deserialize, Serialize)]
+pub struct InvitedUserResponse {
+    pub total_invited: u64,
+    pub users: Vec<InvitedUser>,
+}
+
 impl Storable for CustomInfo {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
         let serialized = candid::encode_one(self).expect("Failed to serialize CustomInfo");
@@ -177,6 +193,9 @@ thread_local! {
             is_completed: false,
         },
     ]);
+
+    static INVITE_CODE_TO_USER_MAP: std::cell::RefCell<HashMap<String, Vec<String>>>
+        = std::cell::RefCell::new(HashMap::new());
 }
 
 pub fn add_info_item(key: String, content: String) -> Result<(), String> {
@@ -250,8 +269,12 @@ pub fn find_custom_info_index(dapp_principal: &str, wallet_principal: &str) -> O
         let store = store.borrow();
         for i in 0..store.len() {
             if let Some(info) = store.get(i) {
-                if (!info.dapp_principal.is_empty() && info.dapp_principal == dapp_principal) ||
-                    (!info.wallet_principal.is_empty() && info.wallet_principal == wallet_principal) {
+                if !info.wallet_principal.is_empty() && info.wallet_principal == wallet_principal {
+                    return Some(i);
+                }
+
+                if info.wallet_principal.is_empty() && !info.dapp_principal.is_empty()
+                    && info.dapp_principal == dapp_principal {
                     return Some(i);
                 }
             }
@@ -400,7 +423,8 @@ pub fn list_custom_info(page: u64, page_size: u64) -> Vec<CustomInfo> {
     })
 }
 
-pub fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>, used_invite_code: String) -> bool {
+pub fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>,
+                          used_invite_code: String) -> bool {
     if dapp_principal.is_none() && wallet_principal.is_none() {
         ic_cdk::trap("Either dapp_principal or wallet_principal must be provided");
     }
@@ -409,6 +433,19 @@ pub fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Opti
     let user_principal = wallet_principal
         .clone()
         .unwrap_or_else(|| dapp_principal.clone().unwrap_or(caller_principal));
+
+    // Verify if the invitation code corresponds to a real, existing user.
+    let inviter_principal = CUSTOM_INFO_SET.with(|store| {
+        let store = store.borrow();
+        let result = store.iter()
+            .find(|info| info.invite_code == used_invite_code)
+            .map(|info| info.wallet_principal.clone());
+        result
+    });
+    if inviter_principal.is_none() {
+        ic_cdk::println!("Invalid invite code, no matching inviter found: {}", used_invite_code);
+        return false;
+    }
 
     CUSTOM_INFO_SET.with(|store| {
         let mut store = store.borrow_mut();
@@ -434,6 +471,12 @@ pub fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Opti
                         "User {:?} invitation code submitted successfully，reward {:?}",
                         user_principal, INVITE_REWARD
                     );
+
+                    // Maintain the relationship between used_invite_code and the users who entered the invitation code
+                    INVITE_CODE_TO_USER_MAP.with(|map| {
+                        let mut map = map.borrow_mut();
+                        map.entry(used_invite_code.clone()).or_insert_with(Vec::new).push(user_principal.clone());
+                    });
 
                     return true;
                 }
@@ -518,3 +561,56 @@ pub fn get_quest_list(dapp_principal: Option<String>, wallet_principal: Option<S
 
     QUESTS.with(|quests| quests.borrow().clone())
 }
+
+pub fn get_invited_users(dapp_principal: Option<String>, wallet_principal: Option<String>) -> InvitedUserResponse {
+    if dapp_principal.is_none() && wallet_principal.is_none() {
+        ic_cdk::trap("Either dapp_principal or wallet_principal must be provided");
+    }
+
+    let caller_principal = ic_cdk::caller().to_string();
+    let user_principal = wallet_principal
+        .clone()
+        .unwrap_or_else(|| dapp_principal.clone().unwrap_or(caller_principal));
+
+    let mut users = Vec::new();
+    let mut total_invited = 0;
+
+    INVITE_CODE_TO_USER_MAP.with(|map| {
+        let map = map.borrow();
+        for (invite_code, invited_users) in map.iter() {
+            if let Some(inviter) = find_inviter_by_invite_code(invite_code) {
+                if inviter == user_principal {
+                    CUSTOM_INFO_SET.with(|store| {
+                        let store = store.borrow();
+                        for invited_user_principal in invited_users {
+                            if let Some(user_info) = store.iter().find(|info| &info.wallet_principal == invited_user_principal) {
+                                users.push(InvitedUser {
+                                    dapp_principal: user_info.dapp_principal.clone(),
+                                    wallet_principal: user_info.wallet_principal.clone(),
+                                    nick_name: user_info.nick_name.clone(),
+                                    logo: user_info.logo.clone(),
+                                    reward_amount: INVITE_REWARD,
+                                });
+                                total_invited += 1;
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    });
+
+    InvitedUserResponse {
+        total_invited,
+        users,
+    }
+}
+
+fn find_inviter_by_invite_code(invite_code: &String) -> Option<String> {
+    CUSTOM_INFO_SET.with(|store| {
+        let store = store.borrow();
+        let result = store.iter().find(|info| info.invite_code == *invite_code).map(|info| info.wallet_principal.clone());
+        result
+    })
+}
+
