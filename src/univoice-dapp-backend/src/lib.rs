@@ -293,17 +293,15 @@ fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<String>
 }
 
 #[ic_cdk::update]
-fn attach_policy(cluster_id: String, principal_id: String, resource: String) -> Result<(), String> {
+async fn attach_policies(cluster_id: String, principal_id: String, policies: String) -> Result<(), String> {
     is_called_by_dapp_frontend()?;
-    ic_oss_dapp::attach_policy(cluster_id, principal_id, resource);
-    Ok(())
+    ic_oss_dapp::attach_policies(cluster_id, principal_id, policies).await
 }
 
 #[ic_cdk::update]
-fn detach_policy(cluster_id: String, principal_id: String, resource: String) -> Result<(), String> {
+async fn detach_policies(cluster_id: String, principal_id: String, policies: String) -> Result<(), String> {
     is_called_by_dapp_frontend()?;
-    ic_oss_dapp::detach_policy(cluster_id, principal_id, resource);
-    Ok(())
+    ic_oss_dapp::detach_policies(cluster_id, principal_id, policies).await
 }
 
 #[ic_cdk::query]

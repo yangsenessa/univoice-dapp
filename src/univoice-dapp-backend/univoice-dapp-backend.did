@@ -163,6 +163,6 @@ service : {
     "get_quest_list": (opt text, opt text) -> (vec Quest) query;
 
     //ic_oss
-    "attach_policy": (text, text, text) -> (PolicyResult);
-    "detach_policy": (text, text, text) -> (PolicyResult);
+    "attach_policies": (text, text, text) -> (PolicyResult);
+    "detach_policies": (text, text, text) -> (PolicyResult);
 };
