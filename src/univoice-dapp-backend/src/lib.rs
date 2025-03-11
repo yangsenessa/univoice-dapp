@@ -293,15 +293,15 @@ fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<String>
 }
 
 #[ic_cdk::update]
-async fn attach_policies(cluster_id: String, principal_id: String, policies: String) -> Result<(), String> {
+async fn attach_policies(bucket_id: String, cluster_id: String, principal_id: String, policies: String) -> Result<(), String> {
     is_called_by_dapp_frontend()?;
-    ic_oss_dapp::attach_policies(cluster_id, principal_id, policies).await
+    ic_oss_dapp::attach_policies(bucket_id, cluster_id, principal_id, policies).await
 }
 
 #[ic_cdk::update]
-async fn detach_policies(cluster_id: String, principal_id: String, policies: String) -> Result<(), String> {
+async fn detach_policies(bucket_id: String, cluster_id: String, principal_id: String, policies: String) -> Result<(), String> {
     is_called_by_dapp_frontend()?;
-    ic_oss_dapp::detach_policies(cluster_id, principal_id, policies).await
+    ic_oss_dapp::detach_policies(bucket_id, cluster_id, principal_id, policies).await
 }
 
 #[ic_cdk::query]
@@ -310,9 +310,9 @@ fn get_invited_users(dapp_principal: Option<String>, wallet_principal: Option<St
 }
 
 #[ic_cdk::query]
-async fn get_access_token(wallet_principal: String, bucket_id: String) -> Result<(String, String), String> {
+async fn get_access_token(wallet_principal: String, bucket_id: String, cluster_id: String) -> Result<String, String> {
     is_called_by_dapp_frontend()?;
-    ic_oss_dapp::get_access_token(wallet_principal, bucket_id).await
+    ic_oss_dapp::get_access_token(wallet_principal, bucket_id, cluster_id).await
 }
 
 ic_cdk::export_candid!();
