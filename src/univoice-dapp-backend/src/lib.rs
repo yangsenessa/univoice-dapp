@@ -309,8 +309,8 @@ fn get_invited_users(dapp_principal: Option<String>, wallet_principal: Option<St
     buss_types::get_invited_users(dapp_principal, wallet_principal)
 }
 
-#[ic_cdk::query]
-async fn get_access_token(wallet_principal: String, bucket_id: String, cluster_id: String) -> Result<String, String> {
+#[ic_cdk::update]
+async fn get_access_token(wallet_principal: String, bucket_id: String, cluster_id: String) -> Result<ic_oss_dapp::AccessTokenResponse, String> {
     is_called_by_dapp_frontend()?;
     ic_oss_dapp::get_access_token(wallet_principal, bucket_id, cluster_id).await
 }

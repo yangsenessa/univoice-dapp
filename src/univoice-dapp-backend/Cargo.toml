@@ -25,3 +25,4 @@ rand = { version = "0.8", features = ["small_rng", "std_rng", "std"], default-fe
 ic-oss-types = "1.0.0"
 ic-oss-can = "1.0.0"
 hex = "0.4"
+base64 = "0.21"

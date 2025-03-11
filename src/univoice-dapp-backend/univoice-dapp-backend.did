@@ -165,5 +165,5 @@ service : {
     //ic_oss
     "attach_policies": (text, text, text, text) -> (PolicyResult);
     "detach_policies": (text, text, text, text) -> (PolicyResult);
-    "get_access_token": (text, text, text) -> (text);
+    "get_access_token": (text, text, text) -> (record { access_token: text; folder: text });
 };
