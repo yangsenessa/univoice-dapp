@@ -131,6 +131,18 @@ type InvitedUserResponse = record {
     users : vec InvitedUser;
 };
 
+type TaskData = record {
+    task_id: text;
+    task_url: text; 
+    status: text;
+    rewards: nat64;
+};
+
+type UserTasks = record {
+    principal_id: text;
+    tasks: vec TaskData;
+};
+
 service : {
     // Common Info Management
     "add_info_item": (key: text, content: text) -> (variant { Ok; Err: text; });
@@ -146,6 +158,10 @@ service : {
     "list_custom_info": (nat64, nat64) -> (vec CustomInfo) query;
     "get_invited_users": (opt text, opt text) -> (InvitedUserResponse) query;
 
+     // user tasks
+    "get_user_tasks": (principal_id: text) -> (opt vec TaskData) query;
+    "update_task_status": (principal_id: text, task_id: text, status: text) -> (variant { Ok; Err: text; });
+    
     // Invite Code Management
     "create_invite_code": (owner: text) -> (variant { Ok: InviteCode; Err: text; });
     "use_invite_code": (code: text, new_user: text) -> (variant { Ok: InviteRewardRecord; Err: text; });

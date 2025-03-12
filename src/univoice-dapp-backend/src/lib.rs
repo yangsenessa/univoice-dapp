@@ -315,4 +315,15 @@ async fn get_access_token(wallet_principal: String, bucket_id: String, cluster_i
     ic_oss_dapp::get_access_token(wallet_principal, bucket_id, cluster_id).await
 }
 
+#[ic_cdk::query]
+fn get_user_tasks(principal_id: String) -> Option<Vec<buss_types::TaskData>> {
+    buss_types::get_user_tasks(&principal_id)
+}
+
+#[ic_cdk::update]
+async fn update_task_status(principal_id: String, task_id: String, status: String) -> Result<(), String> {
+    is_called_by_dapp_frontend()?;
+    buss_types::update_task_status(&principal_id, &task_id, status)
+}
+
 ic_cdk::export_candid!();

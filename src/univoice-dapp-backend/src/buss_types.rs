@@ -215,6 +215,126 @@ pub struct BatchInfoItem {
     pub content: String,
 }
 
+#[derive(Clone, CandidType, Deserialize, Serialize)]
+pub struct TaskData {
+    pub task_id: String,
+    pub task_url: String,
+    pub status: String,
+    pub rewards: u64,
+}
+
+#[derive(Clone, CandidType, Deserialize, Serialize)]
+pub struct UserTasks {
+    pub principal_id: String,
+    pub tasks: Vec<TaskData>,
+}
+
+impl Storable for UserTasks {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        let serialized = candid::encode_one(self).expect("Failed to serialize UserTasks");
+        std::borrow::Cow::Owned(serialized)
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        candid::decode_one(&bytes).expect("Failed to deserialize UserTasks")
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 8192,
+        is_fixed_size: false,
+    };
+}
+
+thread_local! {
+    static USER_TASKS_MAP: RefCell<StableBTreeMap<String, UserTasks, Memory>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))
+        )
+    );
+}
+
+fn init_user_tasks(principal_id: String) -> Result<(), String> {
+    USER_TASKS_MAP.with(|store| {
+        let mut store = store.borrow_mut();
+        if store.contains_key(&principal_id) {
+            return Ok(());
+        }
+
+        // Initialize with default tasks
+        let default_tasks = vec![
+            TaskData {
+                task_id: "Follow_X".to_string(),
+                task_url: "https://x.com/UNIVOICE_".to_string(),
+                status: "".to_string(),
+                rewards: 5000,
+            },
+            TaskData {
+                task_id: "Follow_TG_Community".to_string(),
+                task_url: "https://t.me/univoiceofficial".to_string(),
+                status: "".to_string(),
+                rewards: 5000,
+            },
+            TaskData {
+                task_id: "Follow_TG_Channel".to_string(),
+                task_url: "https://t.me/+S3WQWidjW9lkZTU1".to_string(),
+                status: "".to_string(),
+                rewards: 5000,
+            },
+            TaskData {
+                task_id: "Follow_YouTuBe".to_string(),
+                task_url: "".to_string(),
+                status: "".to_string(),
+                rewards: 5000,
+            },
+        ];
+
+        let user_tasks = UserTasks {
+            principal_id: principal_id.clone(),
+            tasks: default_tasks,
+        };
+
+        store.insert(principal_id, user_tasks);
+        Ok(())
+    })
+}
+
+pub fn get_user_tasks(principal_id: &str) -> Option<Vec<TaskData>> {
+    USER_TASKS_MAP.with(|store| {
+        let store_ref = store.borrow();
+        if !store_ref.contains_key(&principal_id.to_string()) {
+            // Drop borrow before calling init
+            drop(store_ref);
+            // Initialize tasks if they don't exist
+            let _ = init_user_tasks(principal_id.to_string());
+            // Get the store again after initialization
+            let store_ref_new = store.borrow();
+            store_ref_new.get(&principal_id.to_string()).map(|user_tasks| user_tasks.tasks)
+        } else {
+            store_ref.get(&principal_id.to_string()).map(|user_tasks| user_tasks.tasks)
+        }
+    })
+}
+
+pub fn update_task_status(principal_id: &str, task_id: &str, status: String) -> Result<(), String> {
+    USER_TASKS_MAP.with(|store| {
+        let mut store = store.borrow_mut();
+        let principal_str = principal_id.to_string();
+        
+        if let Some(mut user_tasks) = store.get(&principal_str) {
+            for task in &mut user_tasks.tasks {
+                if task.task_id == task_id {
+                    task.status = status;
+                    store.insert(principal_str, user_tasks);
+                    return Ok(());
+                }
+            }
+            Err(format!("Task with ID {} not found", task_id))
+        } else {
+            Err(format!("User with ID {} not found", principal_id))
+        }
+    })
+}
+
 pub fn batch_add_info_items(items: Vec<BatchInfoItem>) -> Result<(), String> {
     COMMON_INFO_MAP.with(|store| {
         let mut store = store.borrow_mut();
@@ -269,12 +389,11 @@ pub fn find_custom_info_index(dapp_principal: &str, wallet_principal: &str) -> O
         let store = store.borrow();
         for i in 0..store.len() {
             if let Some(info) = store.get(i) {
-                if !info.wallet_principal.is_empty() && info.wallet_principal == wallet_principal {
+                if !wallet_principal.is_empty() && !info.wallet_principal.is_empty() && info.wallet_principal == wallet_principal {
                     return Some(i);
                 }
 
-                if info.wallet_principal.is_empty() && !info.dapp_principal.is_empty()
-                    && info.dapp_principal == dapp_principal {
+                if !dapp_principal.is_empty() && !info.dapp_principal.is_empty() && info.dapp_principal == dapp_principal {
                     return Some(i);
                 }
             }
