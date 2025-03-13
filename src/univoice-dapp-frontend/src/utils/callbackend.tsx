@@ -43,7 +43,7 @@ export async function get_user_tasks(principalId: string): Promise<TaskData[] | 
         console.log("Fetching tasks for principal ID:", principalId);
         const actor = await createActor();
         const result = await actor.get_user_tasks(principalId) as TaskData[][];
-        
+
         if (result.length === 0) {
             return null;
         }

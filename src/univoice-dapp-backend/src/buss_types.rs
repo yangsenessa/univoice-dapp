@@ -4,8 +4,7 @@ use serde::Serialize;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, Storable, StableBTreeMap, StableVec, storable::Bound};
 use std::cell::RefCell;
-use std::fs;
-use ic_oss_can::types::FileMetadata;
+
 use crate::constants::INVITE_REWARD;
 use std::option::Option;
 use std::collections::HashMap;
@@ -196,6 +195,11 @@ thread_local! {
 
     static INVITE_CODE_TO_USER_MAP: std::cell::RefCell<HashMap<String, Vec<String>>>
         = std::cell::RefCell::new(HashMap::new());
+    static USER_TASKS_MAP: RefCell<StableBTreeMap<String, UserTasks, Memory>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))
+        )
+    );
 }
 
 pub fn add_info_item(key: String, content: String) -> Result<(), String> {
@@ -245,18 +249,11 @@ impl Storable for UserTasks {
     };
 }
 
-thread_local! {
-    static USER_TASKS_MAP: RefCell<StableBTreeMap<String, UserTasks, Memory>> = RefCell::new(
-        StableBTreeMap::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))
-        )
-    );
-}
 
 fn init_user_tasks(principal_id: String) -> Result<(), String> {
     USER_TASKS_MAP.with(|store| {
-        let mut store = store.borrow_mut();
-        if store.contains_key(&principal_id) {
+        let mut store_ref = store.borrow_mut();
+        if store_ref.contains_key(&principal_id) {
             return Ok(());
         }
 
@@ -295,7 +292,7 @@ fn init_user_tasks(principal_id: String) -> Result<(), String> {
 
         // Log that we're initializing tasks for a new user
         ic_cdk::println!("Initializing tasks for new user: {}", principal_id.clone());
-        store.insert(principal_id, user_tasks);
+        store_ref.insert(principal_id, user_tasks);
         Ok(())
     })
 }
@@ -309,11 +306,18 @@ pub fn get_user_tasks(principal_id: &str) -> Option<Vec<TaskData>> {
             // Initialize tasks if they don't exist
             let _ = init_user_tasks(principal_id.to_string());
             // Get the store again after initialization
+            ic_cdk::println!("Get the store again after initialization {}",&principal_id.to_string());
             let store_ref_new = store.borrow();
+            // Log all keys in store_ref_new for debugging
+            ic_cdk::println!("DEBUG: Keys in store after initialization:");
+            let keys_after_init: Vec<String> = store_ref_new.iter().map(|(k, _)| k.clone()).collect();
+            for key in &keys_after_init {
+                ic_cdk::println!("  - Key: {}", key);
+            }
             store_ref_new.get(&principal_id.to_string()).map(|user_tasks| user_tasks.tasks)
         } else {
             // Log that we're retrieving tasks for an existing user
-            ic_cdk::println!("Retrieving tasks for existing user: {}", principal_id);
+            ic_cdk::println!("Retrieving tasks for existing user: {}", &principal_id.to_string().clone());
             store_ref.get(&principal_id.to_string()).map(|user_tasks| user_tasks.tasks)
         }
     })
@@ -321,20 +325,30 @@ pub fn get_user_tasks(principal_id: &str) -> Option<Vec<TaskData>> {
 
 pub fn update_task_status(principal_id: &str, task_id: &str, status: String) -> Result<(), String> {
     USER_TASKS_MAP.with(|store| {
-        let mut store = store.borrow_mut();
+        let mut store_ref = store.borrow_mut();
         let principal_str = principal_id.to_string();
 
+        // Log all data items in the store for debugging
+        ic_cdk::println!("DEBUG: Printing all user tasks in store");
+        let keys: Vec<String> = store_ref.iter().map(|(k, _)| k.clone()).collect();
+        for key in &keys {
+            ic_cdk::println!("DEBUG: Found key: {}", key);
+        }
+
         // Check if the user exists in the store before proceeding
-        if !store.contains_key(&principal_str) {
+        if !store_ref.contains_key(&principal_str) {
+            // Log attempt to initialize tasks for a user that doesn't exist
+            ic_cdk::println!("User with ID {} not found", principal_str);
+        
             return Err(format!("User with ID {} not found", principal_str));
         }
         
-        if let Some(mut user_tasks) = store.get(&principal_str) {
+        if let Some(mut user_tasks) = store_ref.get(&principal_str.to_string()) {
             for task in &mut user_tasks.tasks {
                 if task.task_id == task_id {
                     task.status = status;
-                    store.insert(principal_str, user_tasks);
-                    return Ok(());
+                    store_ref.insert(principal_str.clone(), user_tasks);
+                    return Ok(());  
                 }
             }
             return Err(format!("Task with ID {} not found", task_id));

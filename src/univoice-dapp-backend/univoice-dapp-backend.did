@@ -159,7 +159,7 @@ service : {
     "get_invited_users": (opt text, opt text) -> (InvitedUserResponse) query;
 
      // user tasks
-    "get_user_tasks": (principal_id: text) -> (opt vec TaskData) query;
+    "get_user_tasks": (principal_id: text) -> (opt vec TaskData);
     "update_task_status": (principal_id: text, task_id: text, status: text) -> (variant { Ok; Err: text; });
     
     // Invite Code Management

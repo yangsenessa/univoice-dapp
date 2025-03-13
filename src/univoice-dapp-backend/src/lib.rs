@@ -314,15 +314,17 @@ async fn get_access_token(wallet_principal: String, bucket_id: String, cluster_i
     is_called_by_dapp_frontend()?;
     ic_oss_dapp::get_access_token(wallet_principal, bucket_id, cluster_id).await
 }
-
-#[ic_cdk::query]
+//todo::Update calls consume significantly more cycles than query call
+#[ic_cdk::update]
 fn get_user_tasks(principal_id: String) -> Option<Vec<buss_types::TaskData>> {
+    ic_cdk::println!("call get_user_tasks: {}", principal_id);
     buss_types::get_user_tasks(&principal_id)
 }
 
 #[ic_cdk::update]
 async fn update_task_status(principal_id: String, task_id: String, status: String) -> Result<(), String> {
     is_called_by_dapp_frontend()?;
+    ic_cdk::println!("call update_task_status: {}", principal_id);
     buss_types::update_task_status(&principal_id, &task_id, status)
 }
 
