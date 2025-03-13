@@ -282,7 +282,7 @@ fn init_user_tasks(principal_id: String) -> Result<(), String> {
             },
             TaskData {
                 task_id: "Follow_YouTuBe".to_string(),
-                task_url: "".to_string(),
+                task_url: "https://youtube.com/@univoice-icp?si=v4LRyhzBbW1YZWLJ".to_string(),
                 status: "".to_string(),
                 rewards: 5000,
             },
@@ -293,6 +293,8 @@ fn init_user_tasks(principal_id: String) -> Result<(), String> {
             tasks: default_tasks,
         };
 
+        // Log that we're initializing tasks for a new user
+        ic_cdk::println!("Initializing tasks for new user: {}", principal_id.clone());
         store.insert(principal_id, user_tasks);
         Ok(())
     })
@@ -310,6 +312,8 @@ pub fn get_user_tasks(principal_id: &str) -> Option<Vec<TaskData>> {
             let store_ref_new = store.borrow();
             store_ref_new.get(&principal_id.to_string()).map(|user_tasks| user_tasks.tasks)
         } else {
+            // Log that we're retrieving tasks for an existing user
+            ic_cdk::println!("Retrieving tasks for existing user: {}", principal_id);
             store_ref.get(&principal_id.to_string()).map(|user_tasks| user_tasks.tasks)
         }
     })
@@ -319,6 +323,11 @@ pub fn update_task_status(principal_id: &str, task_id: &str, status: String) -> 
     USER_TASKS_MAP.with(|store| {
         let mut store = store.borrow_mut();
         let principal_str = principal_id.to_string();
+
+        // Check if the user exists in the store before proceeding
+        if !store.contains_key(&principal_str) {
+            return Err(format!("User with ID {} not found", principal_str));
+        }
         
         if let Some(mut user_tasks) = store.get(&principal_str) {
             for task in &mut user_tasks.tasks {
@@ -328,10 +337,9 @@ pub fn update_task_status(principal_id: &str, task_id: &str, status: String) -> 
                     return Ok(());
                 }
             }
-            Err(format!("Task with ID {} not found", task_id))
-        } else {
-            Err(format!("User with ID {} not found", principal_id))
-        }
+            return Err(format!("Task with ID {} not found", task_id));
+        } 
+        Err(format!("Undefine exception "))
     })
 }
 

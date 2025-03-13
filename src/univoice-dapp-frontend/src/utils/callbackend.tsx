@@ -8,7 +8,7 @@ import { isLocalNet } from "@/utils/env";
  * @module callbackend
  */
 
-// Mode
+
 const development = isLocalNet();
 
 // Backend canister ID - use the correct ID from the parent .env file
@@ -47,7 +47,7 @@ export async function get_user_tasks(principalId: string): Promise<TaskData[] | 
         if (result.length === 0) {
             return null;
         }
-        
+        console.log("User tasks retrieved:", result[0]);
         return result[0]; // The API returns [Array<TaskData>] or []
     } catch (error) {
         console.error("Error fetching user tasks:", error);

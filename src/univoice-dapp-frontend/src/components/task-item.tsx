@@ -3,6 +3,8 @@ import style from './task-item.module.scss'
 import { useAcountStore } from '@/stores/user';
 import { toastInfo, toastError, toastWarn } from '@/components/toast';
 import { fmtInt } from '@/utils/index';
+import { update_task_status } from '@/utils/callbackend'; // Import the API function
+
 
 const TaskItem = ({
     item,
@@ -29,8 +31,7 @@ const TaskItem = ({
 
     // todo call api
     try {
-    //   const res = await finishTask(getPrincipal(), item.task_id);
-
+      const res = await finishTask(getPrincipal(), item.task_id);
       setComplate(true);
     } catch (error) {
       console.log('🚀 ~ onTapTask ~ error:', error);
@@ -41,6 +42,31 @@ const TaskItem = ({
   const openUrl = () => {
     const w = window.open(item.task_url, '_blank');
   }
+
+  const finishTask = async (principalId: string, taskId: string) => {
+    if (!principalId || !taskId) {
+      toastWarn('Missing principal ID or task ID');
+      return false;
+    }
+    
+    try {
+      const result = await update_task_status(principalId, taskId, 'FINISH');
+      
+      if ('Ok' in result) {
+        toastInfo('Task completed successfully');
+        return true;
+      } else if ('Err' in result) {
+        console.error('Task completion error:', result.Err);
+        toastError(`Contract Err: ${result.Err}`);
+        return false;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error finishing task:', error);
+      toastError('Failed to complete task');
+      return false;
+    }
+  };
 
   return (
     <div className={`${style.task} ${customeClass} ${ hideAction || item.isComplate || !item.task_url ? style.disable : style.actable}`} onClick={() => !hideAction && onTapTask()}>
