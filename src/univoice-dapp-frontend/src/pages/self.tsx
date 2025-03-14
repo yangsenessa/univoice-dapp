@@ -123,6 +123,8 @@ function SelfPage() {
     })      
   }
 
+  
+
   const clickClaim = () => {
     if(!getPrincipal()){
       toastWarn('Failed to claim rewards: ' + ERROR_MSG.USER_NOT_AUTH)

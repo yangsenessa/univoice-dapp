@@ -10,6 +10,8 @@ use std::option::Option;
 use std::collections::HashMap;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
+// Define TokenAmount as a numeric type for storing token amounts
+type TokenAmount = u64;
 
 #[derive(Clone, CandidType, Deserialize, Serialize)]
 pub struct CommonInfoCfg {
@@ -96,7 +98,7 @@ pub struct CustomInfo {
     pub is_invite_code_filled: bool,
     pub invite_code: String,
     pub used_invite_code: Option<String>,
-    pub total_rewards: u64,
+    pub total_rewards: TokenAmount,
 }
 
 #[derive(Clone, CandidType, Deserialize, Serialize)]

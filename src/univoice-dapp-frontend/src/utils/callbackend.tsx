@@ -102,3 +102,39 @@ export async function claim_reward(
         return false;
     }
 }
+/**
+ * Adds custom information for a user to the backend canister
+ * @param customInfo - The custom information object to add
+ * @returns A promise that resolves to either {Ok: null} on success or {Err: string} on failure
+ */
+export async function add_custom_info(customInfo: {
+    dapp_principal: string;
+    wallet_principal: string;
+    nick_name: string;
+    logo: string;
+    is_invite_code_filled: boolean;
+    invite_code: string;
+    used_invite_code: string | [] | [string];  // 更灵活的类型定义，兼容多种形式的opt text
+    total_rewards: bigint;
+}): Promise<{ Ok: null } | { Err: string }> {
+    try {
+        // 处理used_invite_code字段，确保发送给Candid接口的是正确格式
+        const processedInfo = {
+            ...customInfo,
+            used_invite_code: typeof customInfo.used_invite_code === "string" 
+                ? [customInfo.used_invite_code] 
+                : customInfo.used_invite_code
+        };
+        
+        console.log("Adding custom info:", processedInfo);
+        const actor = await createActor();
+        const result = await actor.add_custom_info(processedInfo) as { Ok: null } | { Err: string };
+        console.log("Custom info add result:", result);
+        return result;
+    } catch (error) {
+        console.error("Error adding custom info:", error);
+        return { Err: `Failed to add custom info: ${error.message}` };
+    }
+}
+
+

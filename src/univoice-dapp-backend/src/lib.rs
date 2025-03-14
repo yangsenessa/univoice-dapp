@@ -73,7 +73,7 @@ use candid::{CandidType, Principal};
 use getrandom::Error;
 use rand::{RngCore, SeedableRng};
 use rand::rngs::SmallRng;
-use rand::rngs::StdRng;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, time::Duration};
@@ -161,6 +161,7 @@ async fn update_info_item(key: String, content: String) -> Result<(), String> {
 
 #[ic_cdk::update]
 async fn add_custom_info(mut info: buss_types::CustomInfo) -> Result<(), String> {
+    ic_cdk::println!("add_custom_info");
     is_called_by_dapp_frontend()?;
 
     // initialization invite_code and is_invite_code_filled
@@ -171,15 +172,12 @@ async fn add_custom_info(mut info: buss_types::CustomInfo) -> Result<(), String>
     };
 
     if info.invite_code.is_empty() {
-        match activate_types::create_invite_code(owner.clone()) {
-            Ok(invite_code) => {
-                info.invite_code = invite_code.code;
-            }
-
-            Err(err) => {
-                return Err(format!("Failed to generate invite code: {}", err));
-            }
-        }
+         // Generate random 6-digit code
+         let mut rng = rand::thread_rng();
+         let code: String = (0..6)
+             .map(|_| rng.gen_range(0..10).to_string())
+             .collect();
+        info.invite_code = code;
     }
 
     info.is_invite_code_filled = info.used_invite_code.as_ref().map_or(false, |code| !code.is_empty());
