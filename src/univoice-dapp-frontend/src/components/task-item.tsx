@@ -69,7 +69,7 @@ const TaskItem = ({
   };
 
   return (
-    <div className={`${style.task} ${customeClass} ${ hideAction || item.isComplate || !item.task_url ? style.disable : style.actable}`} onClick={() => !hideAction && onTapTask()}>
+    <div className={`${style.task} ${customeClass} ${ hideAction || isComplate || !item.task_url ? style.disable : style.actable}`} onClick={() => !hideAction && onTapTask()}>
       <div className={`${style.taskIcon} ${customeIconClass}`}>
         <img src={item.logo || item.icon} alt="" />
       </div>
@@ -81,7 +81,7 @@ const TaskItem = ({
         </div>
       </div>
       <div className={`${style.go} ${ hideAction || !item.task_url ? style.hiddenGo : ''}`}>
-        <div className={`${style.statusIcon} ${ item.isComplate ? style.statusChecked : style.statusGo}`}></div>
+        <div className={`${style.statusIcon} ${ isComplate ? style.statusChecked : style.statusGo}`}></div>
       </div>
     </div>
   );
