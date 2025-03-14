@@ -57,9 +57,6 @@
 /// Retrieves all reward records for a specific user.
 /// Returns a vector of InviteRewardRecord objects.
 
-/// Verifies the validity of an invite code.
-/// Returns Option<InviteCode> containing the invite code details if valid.
-
 /// Exports the Candid interface definition for the canister.
 mod buss_types;
 mod activate_types;
@@ -86,6 +83,10 @@ use ic_oss_types::file::{
     CreateFileInput, CreateFileOutput, FileInfo, UpdateFileChunkInput,
     UpdateFileChunkOutput, UpdateFileInput, UpdateFileOutput,
 };
+
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc1::transfer::{BlockIndex, NumTokens};
 
 thread_local! {
     static RNG: RefCell<Option<SmallRng>> = RefCell::new(None);
@@ -161,15 +162,14 @@ async fn update_info_item(key: String, content: String) -> Result<(), String> {
 
 #[ic_cdk::update]
 async fn add_custom_info(mut info: buss_types::CustomInfo) -> Result<(), String> {
-    ic_cdk::println!("add_custom_info");
+    ic_cdk::println!("call add_custom_info{}", info.wallet_principal);
     is_called_by_dapp_frontend()?;
 
     // initialization invite_code and is_invite_code_filled
-    let owner = if !info.wallet_principal.is_empty() {
-        info.wallet_principal.clone()
-    } else {
-        info.dapp_principal.clone()
-    };
+    if info.wallet_principal.is_empty() {
+        ic_cdk::println!("Adding custom info for wallet: pricipal is empty");
+        return Err("Wallet principal cannot be empty".to_string());
+    }
 
     if info.invite_code.is_empty() {
          // Generate random 6-digit code
@@ -177,10 +177,14 @@ async fn add_custom_info(mut info: buss_types::CustomInfo) -> Result<(), String>
          let code: String = (0..6)
              .map(|_| rng.gen_range(0..10).to_string())
              .collect();
+        // Log the generated invite code
+        ic_cdk::println!("Generated random invite code: {}", code);
         info.invite_code = code;
     }
 
-    info.is_invite_code_filled = info.used_invite_code.as_ref().map_or(false, |code| !code.is_empty());
+    info.is_invite_code_filled = !info.invite_code.is_empty();
+    // Log the is_invite_code_filled status
+    ic_cdk::println!("Invite code filled status: {}", info.is_invite_code_filled);
     info.total_rewards = 0;
     buss_types::add_custom_info(info)
 }
@@ -202,33 +206,15 @@ fn list_custom_info(page: u64, page_size: u64) -> Vec<buss_types::CustomInfo> {
 }
 
 #[ic_cdk::update]
-async fn create_invite_code(owner: String) -> Result<activate_types::InviteCode, String> {
+async fn use_invite_code(code: String, new_user_principalid: String) -> Result<activate_types::InviteRewardRecord, String> {
     is_called_by_dapp_frontend()?;
-    activate_types::create_invite_code(owner)
+    activate_types::use_invite_code(code, new_user_principalid)
 }
-
-#[ic_cdk::update]
-async fn use_invite_code(code: String, new_user: String) -> Result<activate_types::InviteRewardRecord, String> {
-    is_called_by_dapp_frontend()?;
-    activate_types::use_invite_code(code, new_user)
-}
-
-// #[ic_cdk::update]
-// async fn claim_reward(reward_id: String) -> Result<activate_types::InviteRewardRecord, String> {
-//     is_called_by_dapp_frontend()?;
-//     activate_types::claim_reward(reward_id).await
-// }
 
 #[ic_cdk::query]
 fn get_user_rewards(user_principal: String) -> Vec<activate_types::InviteRewardRecord> {
     activate_types::get_user_rewards(user_principal)
 }
-
-#[ic_cdk::query]
-fn verify_invite_code(code: String) -> Option<activate_types::InviteCode> {
-    activate_types::verify_invite_code(code)
-}
-
 
 #[ic_cdk::update]
 async fn get_user_nfts(req: UserNFTsRequest) -> Result<UserNFTsResponse, String> {
@@ -258,26 +244,6 @@ async fn buy_nft_license(buyer: String, collection_id: String, quantity: u64) ->
     let collection = license_types::get_nft_collection(&collection_id).await?;
 
     Ok((transaction_records, collection))
-}
-
-#[ic_cdk::update]
-fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>,
-                      used_invite_code: String) -> bool {
-    if is_called_by_dapp_frontend().is_err() {
-        ic_cdk::println!("Unauthorized access attempt detected.");
-        return false;
-    }
-
-    buss_types::submit_invite_code(dapp_principal, wallet_principal, used_invite_code)
-}
-
-#[ic_cdk::query]
-fn get_quest_list(dapp_principal: Option<String>, wallet_principal: Option<String>) -> Vec<Quest> {
-    if is_called_by_dapp_frontend().is_err() {
-        ic_cdk::println!("Unauthorized access attempt detected.");
-        return vec![];
-    }
-    buss_types::get_quest_list(dapp_principal, wallet_principal)
 }
 
 #[ic_cdk::update]
@@ -324,6 +290,98 @@ async fn update_task_status(principal_id: String, task_id: String, status: Strin
     is_called_by_dapp_frontend()?;
     ic_cdk::println!("call update_task_status: {}", principal_id);
     buss_types::update_task_status(&principal_id, &task_id, status)
+}
+
+#[ic_cdk::query]
+fn get_unclaimed_rewards(user_principal: String) -> candid::Nat {
+    // Get unclaimed task rewards
+    let task_rewards = activate_types::get_unclaimed_task_rewards(user_principal.clone());
+    
+    // Get unclaimed invite rewards
+    let invite_rewards = activate_types::get_unclaimed_invite_rewards(user_principal);
+    
+    // Sum both rewards
+    task_rewards + invite_rewards
+}
+
+#[ic_cdk::update]
+async fn claim_tokens(principal_id: String) -> Result<candid::Nat, String> {
+    is_called_by_dapp_frontend()?;
+    
+    // Get unclaimed tokens for the user
+    let unclaimed_task_rewards = activate_types::get_unclaimed_task_rewards(principal_id.clone());
+    let unclaimed_invite_rewards = activate_types::get_unclaimed_invite_rewards(principal_id.clone());
+    
+    // Calculate total unclaimed rewards
+    let total_unclaimed = unclaimed_task_rewards + unclaimed_invite_rewards;
+    
+    ic_cdk::println!("Total unclaimed rewards for {}: {}", principal_id, total_unclaimed);
+    
+    if total_unclaimed == candid::Nat::from(0u64) {
+        return Ok(candid::Nat::from(0u64));
+    }
+    
+    // Transfer tokens to user
+    let amount_transferred = transfer_tokens_to_user(principal_id.clone(), total_unclaimed.clone()).await?;
+    
+    // Only mark rewards as claimed if transfer was successful
+    activate_types::mark_rewards_as_claimed(principal_id)?;
+    
+    Ok(amount_transferred)
+}
+
+async fn transfer_tokens_to_user(user_principal: String, amount: candid::Nat) -> Result<candid::Nat, String> {
+    // Get the token canister ID - This should be configured properly
+    let token_canister_id = "ryjl3-tyaaa-aaaaa-aaaba-cai"; // Replace with actual token canister ID
+    
+    
+    
+    let controller = ic_cdk::id();
+    
+    // Create user account
+    let user_account = Account {
+        owner: Principal::from_text(&user_principal)
+            .map_err(|e| format!("Invalid user principal: {}", e))?,
+        subaccount: None,
+    };
+    
+    // Create controller account
+    let controller_account = Account {
+        owner: controller,
+        subaccount: None,
+    };
+    
+    // Set up transfer from controller to user
+    let transfer_args = TransferFromArgs {
+        from: controller_account,
+        to: user_account,
+        amount: NumTokens::from(amount.clone()),
+        fee: None,
+        memo: None,
+        created_at_time: Some(ic_cdk::api::time()),
+        spender_subaccount: None,
+    };
+    
+    ic_cdk::println!("Transferring {} tokens from controller to user {}", amount, user_principal);
+    
+    // Call the ICRC2 token canister to transfer tokens
+    let transfer_result = ic_cdk::call::<(TransferFromArgs,), (Result<BlockIndex, TransferFromError>,)>(
+        Principal::from_text(token_canister_id).unwrap(),
+        "icrc2_transfer_from",
+        (transfer_args,),
+    )
+    .await
+    .map_err(|e| format!("Call to token canister failed: {:?}", e))?;
+    
+    let transfer_result = transfer_result.0;
+    
+    match transfer_result {
+        Ok(_) => {
+            ic_cdk::println!("Token transfer successful for user {}", user_principal);
+            Ok(amount)
+        },
+        Err(e) => Err(format!("Token transfer failed: {:?}", e)),
+    }
 }
 
 ic_cdk::export_candid!();

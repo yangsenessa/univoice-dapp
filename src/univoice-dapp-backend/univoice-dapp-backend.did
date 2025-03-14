@@ -1,3 +1,4 @@
+// Type Definitions
 type Account = record {
     owner: principal;
     subaccount: opt vec nat8;
@@ -44,6 +45,7 @@ type UserNFTsRequest = record {
 type UserNFTsResponse = record {
     holdings: vec UserNFTHolding;
 };
+
 type BatchInfoItem = record {
     key: text;
     content: text;
@@ -65,14 +67,6 @@ type CustomInfo = record {
     invite_code: text;
     used_invite_code: opt text;
     total_rewards: nat64;
-};
-
-type InviteCode = record {
-    code: text;
-    owner: text;
-    created_at: nat64;
-    is_used: bool;
-    used_by: opt text;
 };
 
 type InviteRewardRecord = record {
@@ -143,6 +137,7 @@ type UserTasks = record {
     tasks: vec TaskData;
 };
 
+// Service Definition
 service : {
     // Common Info Management
     "add_info_item": (key: text, content: text) -> (variant { Ok; Err: text; });
@@ -158,28 +153,25 @@ service : {
     "list_custom_info": (nat64, nat64) -> (vec CustomInfo) query;
     "get_invited_users": (opt text, opt text) -> (InvitedUserResponse) query;
 
-     // user tasks
+    // user tasks
     "get_user_tasks": (principal_id: text) -> (opt vec TaskData);
     "update_task_status": (principal_id: text, task_id: text, status: text) -> (variant { Ok; Err: text; });
     
     // Invite Code Management
-    "create_invite_code": (owner: text) -> (variant { Ok: InviteCode; Err: text; });
-    "use_invite_code": (code: text, new_user: text) -> (variant { Ok: InviteRewardRecord; Err: text; });
-    "submit_invite_code": (opt text, opt text, text) -> (bool);
-//    "claim_reward": (reward_id: text) -> (variant { Ok: InviteRewardRecord; Err: text; });
+    "use_invite_code": (code: text, new_user_prinpalid: text) -> (variant { Ok: InviteRewardRecord; Err: text; });
     "claim_reward": (opt text, opt text, nat64) -> (bool);
     "get_user_rewards": (user_principal: text) -> (vec InviteRewardRecord) query;
-    "verify_invite_code": (code: text) -> (opt InviteCode) query;
+    "get_unclaimed_rewards": (user_principal: text) -> (nat) query;
+    
     // NFT Management
     "get_user_nfts": (UserNFTsRequest) -> (variant { Ok: UserNFTsResponse; Err: text; });
     "get_nft_collection": (collection_id: text) -> (variant { Ok: NFTCollection; Err: text; });
     "buy_nft_license": (buyer: text, collection_id: text, quantity: nat64) -> (LicenseFetchResult);
 
-    // Quests
-    "get_quest_list": (opt text, opt text) -> (vec Quest) query;
-
     //ic_oss
     "attach_policies": (text, text, text, text) -> (PolicyResult);
     "detach_policies": (text, text, text, text) -> (PolicyResult);
     "get_access_token": (text, text, text) -> (record { access_token: text; folder: text });
+    // Token Claiming
+    "claim_tokens": (principal_id: text) -> (variant { Ok: nat; Err: text; });
 };

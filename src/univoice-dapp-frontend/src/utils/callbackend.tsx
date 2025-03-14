@@ -137,4 +137,52 @@ export async function add_custom_info(customInfo: {
     }
 }
 
+/**
+ * Gets custom information for a user from the backend canister
+ * @param dappPrincipalId - The dapp principal ID (optional)
+ * @param walletPrincipalId - The wallet principal ID (optional)
+ * @returns A promise that resolves to the custom information or null if not found
+ */
+export async function get_custom_info(
+    dappPrincipalId: string | null = null,
+    walletPrincipalId: string | null = null
+): Promise<any | null> {
+    try {
+        const actor = await createActor();
+        const result = await actor.get_custom_info(
+            dappPrincipalId ? [dappPrincipalId] : [], 
+            walletPrincipalId ? [walletPrincipalId] : []
+        );
+        console.log("Custom info retrieved:", result);
+        const resultArray = Array.isArray(result) ? result : [];
+        return resultArray.length > 0 ? resultArray[0] : null;
+    } catch (error) {
+        console.error("Error fetching custom info:", error);
+        return null;
+    }
+}
+
+/**
+ * Uses an invite code for a new user
+ * @param code - The invite code to use
+ * @param newUserPrincipalId - The principal ID of the new user
+ * @returns A promise that resolves to either {Ok: InviteRewardRecord} on success or {Err: string} on failure
+ */
+export async function use_invite_code(
+    code: string,
+    newUserPrincipalId: string
+): Promise<{ Ok: any } | { Err: string }> {
+    try {
+        const actor = await createActor();
+        const result = await actor.use_invite_code(code, newUserPrincipalId) as { Ok: any } | { Err: string };
+        console.log("Invite code use result:", result);
+        return result;
+    } catch (error) {
+        console.error("Error using invite code:", error);
+        return { Err: `Failed to use invite code: ${error.message}` };
+    }
+}
+
+
+
 
