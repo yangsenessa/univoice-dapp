@@ -183,6 +183,41 @@ export async function use_invite_code(
     }
 }
 
+/**
+ * Gets friend information for a user from the backend canister
+ * @param principalId - The principal ID of the user
+ * @returns A promise that resolves to an object with 'friends' array containing friend information
+ */
+export async function get_friend_infos(principalId: string): Promise<{ 
+    friends: Array<{ name: string; avatar: string; friendnum: number; rewards: number }>
+}> {
+        try {
+                const actor = await createActor();
+                const result = await actor.get_friend_infos(principalId);
+                console.log("Friend information retrieved:", result);
+                
+                // Process the result based on the DID definition that returns vec record { CustomInfo; nat }
+                return {
+                        friends: Array.isArray(result) ? result.map((item, index) => {
+                                const customInfo = item[0]; // CustomInfo part
+                                const rewardAmount = Number(item[1]) || 0; // nat part (reward amount)
+                                
+                                return {
+                                        name: customInfo.nick_name || '',
+                                        avatar: customInfo.logo || '',
+                                        friendnum: index, // Using the index as friendnum as requested
+                                        rewards: rewardAmount
+                                };
+                        }) : []
+                };
+        } catch (error) {
+                console.error("Error fetching friend information:", error);
+                return { friends: [] };
+        }
+}
+
+
+
 
 
 

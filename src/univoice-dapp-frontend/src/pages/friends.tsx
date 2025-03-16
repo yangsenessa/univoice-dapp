@@ -7,6 +7,7 @@ import Modal from '@/components/modal-dialog'
 import Default_Avatar from '@/assets/imgs/user_avatar.png'
 // Remove the top-level await import
 import { WALLET_TYPE } from '@/utils/uv_const'
+import { get_friend_infos } from '@/utils/callbackend'; // Add this import
 
 
 function FriendsPage() {
@@ -44,7 +45,7 @@ function FriendsPage() {
             const customInfo = {
               dapp_principal: "224r2-ziaaa-aaaah-aol2a-cai",
               wallet_principal: principal_id,
-              nick_name: 'Angle',
+              nick_name: '',
               logo: 'https://example.com/logo.png',
               is_invite_code_filled: false,
               invite_code: '',
@@ -90,22 +91,25 @@ function FriendsPage() {
   }
 
   const initData = async () => {
-    let result = {
-      friends: [
-        {
-          name: 'Jimmy1',
-          avatar: '',
-          friendnum: 0,
-          rewards: 5000
-        }, {
-          name: 'Jimmy2',
-          avatar: 'https://avatars.githubusercontent.com/u/1029040?v=4',
-          friendnum: 1,
-          rewards: 5000
-        }
-      ]
+    try {
+      const principal = getPrincipal();
+      if (!principal) {
+        console.error('Principal not found');
+        return;
+      }
+      
+      const result = await get_friend_infos(principal);
+      setList(result.friends);
+    } catch (error) {
+      console.error('Failed to fetch friend data:', error);
+      // Fallback to sample data in case of error
+      const fallbackData = {
+        friends: [
+        ]
+      };
+      setList(fallbackData.friends);
     }
-    setList(result.friends);
+    
     // Call the function directly since it's now properly defined as async
     getInviteCode();
   }

@@ -5,6 +5,7 @@ use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemor
 use ic_stable_structures::{DefaultMemoryImpl, Storable, StableBTreeMap, StableVec, storable::Bound};
 use std::cell::RefCell;
 
+use rand::Rng;
 use crate::constants::INVITE_REWARD;
 use std::option::Option;
 use std::collections::HashMap;
@@ -767,5 +768,40 @@ fn find_inviter_by_invite_code(invite_code: &String) -> Option<String> {
         let result = store.iter().find(|info| info.invite_code == *invite_code).map(|info| info.wallet_principal.clone());
         result
     })
+}
+
+pub fn generate_random_nickname() -> String {
+    let adjectives = [
+        "Happy", "Swift", "Brave", "Clever", "Gentle", "Jolly", "Kind", "Lively", "Mighty", "Nice",
+        "Polite", "Quiet", "Rapid", "Smart", "Calm", "Eager", "Tough", "Wise", "Zany", "Proud",
+        "Rare", "Bold", "Quick", "Fresh", "Alpha", "Mega", "Ultra", "Super", "Hyper", "Epic",
+        "Agile", "Bright", "Crazy", "Daring", "Elite", "Fancy", "Grand", "Harsh", "Icy", "Jumpy",
+        "Keen", "Lucky", "Magic", "Noble", "Oval", "Prime", "Royal", "Sleek", "Tiny", "Vast",
+        "Wild", "Young", "Zealous", "Amber", "Blue", "Coral", "Deep", "Elated", "Fierce", "Golden",
+        "Humble", "Ideal", "Joyful", "Keen", "Loyal", "Majestic", "Nifty", "Optimal", "Perfect", "Radiant",
+        "Serene", "Tranquil", "Unique", "Vibrant", "Witty", "Exotic", "Yielding", "Zippy", "Active", "Busy",
+        "Cosmic", "Dynamic", "Earnest", "Flying", "Glowing", "Honest", "Intense", "Jubilant", "Kingly", "Luminous",
+        "Mystical", "Natural", "Original", "Peaceful", "Quirky", "Robust", "Shining", "Talented", "Upbeat", "Valiant"
+    ];
+    
+    let nouns = [
+        "Bear", "Eagle", "Tiger", "Panda", "Shark", "Whale", "Hawk", "Lion", "Wolf", "Fox",
+        "Rabbit", "Deer", "Falcon", "Dragon", "Phoenix", "Rocket", "Star", "Moon", "Comet", "Planet",
+        "Ocean", "Mountain", "Forest", "River", "Sky", "Thunder", "Knight", "Ninja", "Samurai", "Hero",
+        "Wizard", "Pirate", "Giant", "Angel", "Titan", "Demon", "Elf", "Dwarf", "Mage", "Ranger",
+        "Rogue", "Warrior", "Bard", "Monk", "Paladin", "Archer", "Hunter", "Scout", "Mystic", "Shaman",
+        "Gladiator", "Viking", "Nomad", "Sage", "Oracle", "Prophet", "Guardian", "Sentinel", "Warden", "Keeper",
+        "Captain", "Chief", "Emperor", "King", "Queen", "Prince", "Princess", "Duke", "Baron", "Champion",
+        "Soldier", "Mariner", "Scholar", "Alchemist", "Inventor", "Explorer", "Pioneer", "Voyager", "Traveler", "Wanderer",
+        "Seeker", "Fighter", "Legend", "Titan", "Colossus", "Leviathan", "Kraken", "Hydra", "Griffin", "Unicorn",
+        "Pegasus", "Sphinx", "Chimera", "Minotaur", "Centaur", "Cyclops", "Golem", "Gargoyle", "Behemoth", "Phantom"
+    ];
+    
+    let mut rng = rand::thread_rng();
+    let adj_idx = rng.gen_range(0..adjectives.len());
+    let noun_idx = rng.gen_range(0..nouns.len());
+    let number = rng.gen_range(1..1000);
+    
+    format!("{}{}{}", adjectives[adj_idx], nouns[noun_idx], number)
 }
 

@@ -139,6 +139,38 @@ pub fn use_invite_code(code: String, new_user: String) -> Result<InviteRewardRec
     }
 }
 
+pub fn get_friend_infos(owner_principal: String) -> Vec<(CustomInfo, Nat)> {
+    // First, get all invite records where the given principal is the code owner
+    let invited_info = REWARD_RECORDS.with(|records| {
+        let records = records.borrow();
+        let mut invited_data = Vec::new();
+        
+        for (_, record) in records.iter() {
+            if record.code_owner == owner_principal {
+                // Calculate the 30% reward amount for the code owner
+                let reward_amount = (record.token_amount.clone() * 30u32) / 100u32;
+                invited_data.push((record.new_user.clone(), reward_amount));
+            }
+        }
+        
+        invited_data
+    });
+    
+    // Now fetch CustomInfo for each invited user and pair with token amount
+    let mut friend_infos = Vec::new();
+    
+    for (principal, token_amount) in invited_info {
+        if let Some(info) = crate::buss_types::get_custom_info(None, Some(principal.clone())) {
+            friend_infos.push((info, token_amount));
+        } else {
+            // Log if we can't find user info
+            ic_cdk::println!("Could not find CustomInfo for invited user with principal: {}", principal);
+        }
+    }
+    
+    friend_infos
+}
+
 pub fn get_user_rewards(user_principal: String) -> Vec<InviteRewardRecord> {
     REWARD_RECORDS.with(|records| {
         let records = records.borrow();
@@ -272,4 +304,6 @@ pub fn mark_rewards_as_claimed(user_principal: String) -> Result<(), String> {
     
     Ok(())
 }
+
+
 

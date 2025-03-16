@@ -186,6 +186,12 @@ async fn add_custom_info(mut info: buss_types::CustomInfo) -> Result<(), String>
     // Log the is_invite_code_filled status
     ic_cdk::println!("Invite code filled status: {}", info.is_invite_code_filled);
     info.total_rewards = 0;
+
+    // Generate a random nickname if none is provided
+    if info.nick_name.is_empty() {
+        info.nick_name = buss_types::generate_random_nickname();
+        ic_cdk::println!("Generated random nickname: {}", info.nick_name);
+    }
     buss_types::add_custom_info(info)
 }
 
@@ -382,6 +388,12 @@ async fn transfer_tokens_to_user(user_principal: String, amount: candid::Nat) ->
         },
         Err(e) => Err(format!("Token transfer failed: {:?}", e)),
     }
+}
+
+#[ic_cdk::query]
+fn get_friend_infos(owner_principal: String) -> Vec<(buss_types::CustomInfo, candid::Nat)> {
+    ic_cdk::println!("Fetching friend infos and rewards for: {}", owner_principal);
+    activate_types::get_friend_infos(owner_principal)
 }
 
 ic_cdk::export_candid!();
