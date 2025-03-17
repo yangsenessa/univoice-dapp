@@ -10,6 +10,7 @@ import Modal from '@/components/modal-dialog'
 
 // import {fetch_sumary_for_myvoice, claim_to_account_by_principal, get_miner_jnl} from "@/utils/call_dapp_backend";
 import { useAcountStore } from '@/stores/user';
+import { calculate_total_claimable_rewards, get_unclaimed_rewards } from '@/utils/callbackend';
 function SelfPage() {
   const navigate = useNavigate();
 
@@ -62,7 +63,7 @@ function SelfPage() {
     });
   }, [getPrincipal()]);
   
-  const loadSummary = () => {
+  const loadSummary = async () => {
     let data={
       rewards: '',
       claimable: '',
@@ -81,8 +82,27 @@ function SelfPage() {
     //   }).catch(e => {
     //     toastWarn('Failed to query my performance data!')
     //   });
-    data.claimable = '28541012000000';
-    data.rewards = '28541012000000';
+    // Import the calculate_total_claimable_rewards function
+
+    // Use the function to get the claimable rewards
+    try {
+      const claimableRewards = await calculate_total_claimable_rewards(principal_id);
+      data.claimable = claimableRewards.toString();
+    } catch (error) {
+      console.error("Error calculating claimable rewards:", error);
+      toastWarn('Failed to fetch claimable rewards data');
+      data.claimable = '0';
+    }
+
+    // Set initial rewards to 0 until we have a proper function to fetch it
+    try {
+      const unclaimedRewards = await get_unclaimed_rewards(principal_id);
+      data.rewards = unclaimedRewards.toString();
+    } catch (error) {
+      console.error("Error fetching unclaimed rewards:", error);
+      toastWarn('Failed to fetch rewards data');
+      data.rewards = '0';
+    }
     setSummaryData(data);
   }
 

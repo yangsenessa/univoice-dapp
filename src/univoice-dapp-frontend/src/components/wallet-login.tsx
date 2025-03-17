@@ -42,7 +42,7 @@ const WalletLogin = ({
       const customInfo = {
         dapp_principal: "224r2-ziaaa-aaaah-aol2a-cai", // Canister ID of univoice-dapp-frontend
         wallet_principal: principal,
-        nick_name: '',
+        nick_name: 'Angle',
         logo: 'https://example.com/logo.png',
         is_invite_code_filled: false,
         invite_code: '',
