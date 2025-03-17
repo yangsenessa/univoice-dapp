@@ -7,6 +7,7 @@ import { toastSuccess, toastError, toastWarn } from '@/components/toast';
 import { ERROR_MSG } from '@/utils/uv_const';
 import { useNavigate } from 'react-router-dom';
 import Modal from '@/components/modal-dialog'
+import { showLoading, hideLoading } from '@/components/loading'
 
 // import {fetch_sumary_for_myvoice, claim_to_account_by_principal, get_miner_jnl} from "@/utils/call_dapp_backend";
 import { useAcountStore } from '@/stores/user';
@@ -163,6 +164,8 @@ function SelfPage() {
     setMSendOpen(false)
   }
   const openMSend = () => {
+    setSendTargetPId('')
+    setSendAmount('')
     setMSendOpen(true)
   }
 
@@ -179,21 +182,84 @@ function SelfPage() {
   }
 
   const [sendTargetPId, setSendTargetPId] = useState('')
-  const [sendTokenAmount, setSendTokenAmount] = useState('')
+  const [sendAmount, setSendAmount] = useState('')
 
   // const handleInputSendTarget = (e: React.ChangeEvent<HTMLInputElement>) => {
   //   if (e.target.value.length > 6) return;
   //   setSendTargetPId(e.target.value);
   // };
 
+  const handelInputSendAmout = (val: string) => {
+    if (val.length == 0) {
+      setSendAmount(val)
+      return
+    }
+    val = val.replace(/[^\d]/g, ''); // number only
+    setSendAmount(val)
+    // let inputVal = val;
+    // inputVal = inputVal.replace(/[^\d.]/g, '');
+    // const parts = inputVal.split('.');
+    // if (parts.length > 2) {
+    //   inputVal = `${parts[0]}.${parts.slice(1).join('')}`;
+    // }
+    // let [integerPart, ...decimalParts] = inputVal.split('.');
+    // const decimalPart = decimalParts.join('');
+
+    // if (integerPart.length > 0) {
+    //   integerPart = integerPart.replace(/^0+/, '') || '0';
+    // } else if (inputVal.includes('.')) {
+    //   integerPart = '0';
+    // }
+
+    // const trimmedDecimal = decimalPart.slice(0, 8);
+
+    // let newValue = integerPart;
+    // if (trimmedDecimal.length > 0 || inputVal.includes('.')) {
+    //   newValue += `.${trimmedDecimal}`;
+    // }
+
+    // if (newValue === '') newValue = '0';
+
+    // setSendAmount(newValue);
+  }
+
   const handleSubmitSend = () => {
-    // TODO
-    if (!sendTargetPId || !sendTokenAmount) {
+    if (!sendTargetPId || !sendAmount) {
       toastWarn('Please enter both target ID and amount');
       return;
     }
 
-    const amount = parseInt(sendTokenAmount);
+    const amount = parseInt(sendAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toastWarn('Please enter a valid amount');
+      return;
+    }
+
+    // Check if wallet balance is sufficient
+    const currentBalance = parseInt(walletBalance || '0');
+    if (amount > currentBalance) {
+      toastError(ERROR_MSG.INSUFFICIENT_FUNDS);
+      return;
+    }
+    openMSendConfirm();
+  }
+
+  const [mSendConfirmOpen, setMSendConfirmOpen] = useState(false)
+  const onCloseMSendConfirm = () => {
+    setMSendConfirmOpen(false)
+  }
+  const openMSendConfirm = () => {
+    setMSendConfirmOpen(true)
+  }
+
+  const handleConfirmSend = async () => {
+    onCloseMSendConfirm()
+    if (!sendTargetPId || !sendAmount) {
+      toastWarn('Please enter both target ID and amount');
+      return;
+    }
+
+    const amount = parseInt(sendAmount);
     if (isNaN(amount) || amount <= 0) {
       toastWarn('Please enter a valid amount');
       return;
@@ -206,22 +272,24 @@ function SelfPage() {
       return;
     }
 
+    showLoading()
     transfer(sendTargetPId, amount)
       .then((txId) => {
+        hideLoading()
         toastSuccess(`Transfer successful! Transaction ID: ${txId}`);
         refreshBalance(); // Refresh balance after successful transfer
-        setSendTargetPId('');
-        setSendTokenAmount('');
+        onCloseMSend()
       })
       .catch((error) => {
+        hideLoading()
+        console.error('Error send $uvc:', error);
         toastError(`Transfer failed: ${error}`);
       });
-    onCloseMSend();
   }
   
   return (
     <div className="main-container">
-      <div className={`top-nav-bar ${style.topBar}`}>
+      <div className="top-nav-bar">
         <div className={style.topBarWrapper}>
           <div className={style.btnBack} onClick={handleBack}></div>
           <div className={style.welcome}>Welcome</div>
@@ -325,24 +393,35 @@ function SelfPage() {
         isOpen={mSendOpen} onClose={onCloseMSend} overlayClassName={undefined} contentClassName={undefined}>
         <div className="md-title">Send</div>
         
-        <div className={style.iptSendTarget}>
-          <input
-            type="text"
+        <div className={style.sendLabel}>Principal ID</div>
+        <div className={style.iptSend}>
+          <textarea
+            rows={3}
             placeholder="Enter Target Principal ID"
             value={sendTargetPId}
-            // onChange={handleInputSendTarget}
             onChange={(e) => setSendTargetPId(e.target.value)}
-          />
+          ></textarea>
         </div>
-        <div className={style.iptSendAmount}>
+        <div className={style.sendLabel}>Amount</div>
+        <div className={style.iptSend}>
           <input
-            type="number"
+            type="text"
             placeholder="Enter amount of tokens to send"
-            value={sendTokenAmount}
-            onChange={(e) => setSendTokenAmount(e.target.value)}
+            value={sendAmount}
+            onChange={(e) => handelInputSendAmout(e.target.value)}
           />
         </div>
         <div className={`${style.btnSubmitSend} btn-1 md-btn-1`} onClick={handleSubmitSend}>Confirm Send</div>
+      </Modal>
+      <Modal
+        isOpen={mSendConfirmOpen} onClose={onCloseMSendConfirm} overlayClassName={style.abc} contentClassName={style.cdf}>
+        <div className="md-title">Confirm</div>
+        <div className={style.sendConfirm}>Are you sure you want to transfer <span className={style.amount}>{Number(sendAmount)}</span> <span className={style.unit}>$UVC</span> from your account to this PRINCIPAL ID?</div>
+        <div className={style.sendConfirmPid}>{sendTargetPId}</div>
+        <div className={style.modalBtns}>
+          <div className={style.modalBtnOK} onClick={handleConfirmSend}>OK</div>
+          <div className={style.modalBtnCancel} onClick={onCloseMSendConfirm}>Cancel</div>
+        </div>
       </Modal>
     </div>
   );

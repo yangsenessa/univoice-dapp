@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import style from './home.module.scss'
 import WalletLogin from '@/components/wallet-login'
 import InviteCode from '@/components/invite-code'
@@ -10,7 +10,7 @@ import Modal from '@/components/modal-dialog'
 
 function HomePage() {
   const navigate = useNavigate();
-  const { getPrincipal } = useAcountStore();
+  const { getPrincipal, getExInfo } = useAcountStore();
 
   const getPrincipalStr = (len1: number, len2: number) => {
     const pid = getPrincipal()
@@ -66,9 +66,11 @@ function HomePage() {
             <div className={style.avatar}></div>
             <div className={style.name}>{getPrincipalStr(3,2)}</div>
           </div>
+          { !getExInfo().is_invite_code_filled &&
           <div className={style.inviteCode}>
             <div className={style.inviteCodeWrapper} onClick={openMInviteCode}>Invite Code</div>
           </div>
+          }
         </div>
         }
         <div className={style.wallet}>
