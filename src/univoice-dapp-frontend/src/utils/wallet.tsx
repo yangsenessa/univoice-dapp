@@ -142,3 +142,58 @@ export const call_tokens_of = async () => {
   console.log('ICRC7 ledger call: ', tokenIds);
   return tokenIds;
 }
+
+export const transfer = async (toPrincipalId: string, amount: number): Promise<string> => {
+  try {
+    const actor = await buildActor(tokenLedegerIdlFactory, tokenCanisterId);
+    const fromPrincipal = useAcountStore.getState().getPrincipal();
+    
+    if (!fromPrincipal) {
+      return Promise.reject(ERROR_MSG.WALLET_NOT_CONNECTED);
+    }
+    
+    const toPrincipal = Principal.fromText(toPrincipalId);
+    const toAccount = { 'owner': toPrincipal, 'subaccount': [] };
+    
+    const transferArgs = {
+      'to': toAccount,
+      'fee': [], // Optional fee, using default
+      'memo': [], // Optional memo
+      'from_subaccount': [], // Using default subaccount
+      'created_at_time': [], // Optional timestamp
+      'amount': BigInt(amount)
+    };
+    
+    const result = await actor.icrc1_transfer(transferArgs);
+    
+    if ('Ok' in result) {
+      return result.Ok.toString();
+    } else if ('Err' in result) {
+      // Handle different error types
+      const error = result.Err;
+      if ('InsufficientFunds' in error) {
+        return Promise.reject(ERROR_MSG.INSUFFICIENT_FUNDS);
+      } else if ('BadBurn' in error) {
+        return Promise.reject(ERROR_MSG.BAD_BURN);
+      } else if ('BadFee' in error) {
+        return Promise.reject(ERROR_MSG.BAD_FEE);
+      } else if ('TooOld' in error) {
+        return Promise.reject(ERROR_MSG.TOO_OLD);
+      } else if ('CreatedInFuture' in error) {
+        return Promise.reject(ERROR_MSG.CREATED_IN_FUTURE);
+      } else if ('TemporarilyUnavailable' in error) {
+        return Promise.reject(ERROR_MSG.TEMPORARILY_UNAVAILABLE);
+      } else if ('Duplicate' in error) {
+        return Promise.reject(ERROR_MSG.DUPLICATE_TRANSACTION);
+      } else if ('GenericError' in error) {
+        return Promise.reject(error.GenericError.message);
+      }
+      return Promise.reject(ERROR_MSG.TRANSFER_FAILED);
+    }
+    
+    return Promise.reject(ERROR_MSG.UNKNOWN_ERROR);
+  } catch (e) {
+    console.error('Transfer failed:', e);
+    return Promise.reject(e instanceof Error ? e.message : ERROR_MSG.UNKNOWN_ERROR);
+  }
+}

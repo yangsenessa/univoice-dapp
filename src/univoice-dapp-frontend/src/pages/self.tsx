@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fmtInt, fmtUvBalance, fmtTimestamp, fmtSummaryAddr } from '@/utils';
-import { call_tokens_of, getWalletPrincipal, queryBalance as queryWalletBalance } from '@/utils/wallet'
+import { call_tokens_of, getWalletPrincipal, queryBalance as queryWalletBalance, transfer } from '@/utils/wallet'
 import style from './self.module.scss'
 import ImgNftThum from '@/assets/imgs/nft_thum.png'
 import { toastSuccess, toastError, toastWarn } from '@/components/toast';
@@ -179,6 +179,7 @@ function SelfPage() {
   }
 
   const [sendTargetPId, setSendTargetPId] = useState('')
+  const [sendTokenAmount, setSendTokenAmount] = useState('')
 
   // const handleInputSendTarget = (e: React.ChangeEvent<HTMLInputElement>) => {
   //   if (e.target.value.length > 6) return;
@@ -187,6 +188,34 @@ function SelfPage() {
 
   const handleSubmitSend = () => {
     // TODO
+    if (!sendTargetPId || !sendTokenAmount) {
+      toastWarn('Please enter both target ID and amount');
+      return;
+    }
+
+    const amount = parseInt(sendTokenAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toastWarn('Please enter a valid amount');
+      return;
+    }
+
+    // Check if wallet balance is sufficient
+    const currentBalance = parseInt(walletBalance || '0');
+    if (amount > currentBalance) {
+      toastError(ERROR_MSG.INSUFFICIENT_FUNDS);
+      return;
+    }
+
+    transfer(sendTargetPId, amount)
+      .then((txId) => {
+        toastSuccess(`Transfer successful! Transaction ID: ${txId}`);
+        refreshBalance(); // Refresh balance after successful transfer
+        setSendTargetPId('');
+        setSendTokenAmount('');
+      })
+      .catch((error) => {
+        toastError(`Transfer failed: ${error}`);
+      });
     onCloseMSend();
   }
   
@@ -303,6 +332,14 @@ function SelfPage() {
             value={sendTargetPId}
             // onChange={handleInputSendTarget}
             onChange={(e) => setSendTargetPId(e.target.value)}
+          />
+        </div>
+        <div className={style.iptSendAmount}>
+          <input
+            type="number"
+            placeholder="Enter amount of tokens to send"
+            value={sendTokenAmount}
+            onChange={(e) => setSendTokenAmount(e.target.value)}
           />
         </div>
         <div className={`${style.btnSubmitSend} btn-1 md-btn-1`} onClick={handleSubmitSend}>Confirm Send</div>
