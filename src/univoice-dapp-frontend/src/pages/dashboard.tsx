@@ -17,6 +17,7 @@ function DashboardPage() {
     blockProduceSpeed: 0,
     tokensPerBlocks: 0,
   });
+  const nftCanisterId = "3blo3-qqaaa-aaaam-ad3ea-cai";
   const [licenseData, setLicenseData] = useState<any>([]);
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -75,24 +76,14 @@ function DashboardPage() {
     let index = 0;
     let data =[];
     let license_item = {
-      collectionId: '1',
+      collectionId: nftCanisterId,
       name: 'Univoice Listener',
       symbol: '',
       description: 'A liciense for identify as Univoice-Listener.',
       logo: 'https://bafybeibhnv326rmac22wfcxsmtrbdbzjzn5mviykq3rbt4ltqkqqfgobga.ipfs.w3s.link/thum.jpg'
     }
-    let license_item2 = {
-      collectionId: '2',
-      name: 'Univoice Listener',
-      symbol: '',
-      description: 'A liciense for identify as Univoice-Listener.A liciense for identify as Univoice-Listener.A liciense for identify as Univoice-Listener.A liciense for identify as Univoice-Listener.A liciense for identify as Univoice-Listener.A liciense for identify as Univoice-Listener.',
-      logo: 'https://bafybeibhnv326rmac22wfcxsmtrbdbzjzn5mviykq3rbt4ltqkqqfgobga.ipfs.w3s.link/thum.jpg'
-    }
+
     data[index]=license_item;
-    data[1]=license_item2;
-    data[2]=license_item;
-    data[3]=license_item;
-    data[4]=license_item;
     console.log("license_item",data);
     setLicenseData(data);
   }
