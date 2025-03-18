@@ -238,3 +238,80 @@ type InviteCode = record {
 - Frontend canister verification
 - Principal-based authentication
 - Stable storage for data persistence
+
+# Deployment Guide for ic_oss_bucket and ic_oss_cluster
+
+This document outlines the standardized deployment process for ic_oss_bucket and ic_oss_cluster canisters, as well as how to configure access control and generate access tokens.
+
+## Clone the IC-OSS code
+
+Clone the IC-OSS repository with the following command:
+``` git clone git@github.com:ldclabs/ic-oss.git ```
+
+## Deploying ic_oss_bucket
+
+- Enter the ic-oss directory: ``` cd ic-oss/ ```
+- Run the following command to deploy the ic_oss_bucket canister with appropriate initialization parameters:
+```aidl
+dfx deploy ic_oss_bucket --argument "(opt variant {Init =
+  record {
+    name = \"Univoice Labs\";
+    file_id = 0;
+    max_file_size = 2048;
+    max_folder_depth = 10;
+    max_children = 1000;
+    visibility = 0;
+    max_custom_data_size = 4096;
+    enable_hash_index = false;
+  }
+})"
+```
+
+## Deploying ic_oss_cluster
+Run the following command to deploy the ic_oss_cluster canister with specified initialization configurations:
+```aidl
+dfx deploy ic_oss_cluster --argument "(opt variant {Init =
+  record {
+    name = \"Univoice Labs\";
+    ecdsa_key_name = \"test_key_1\";
+    schnorr_key_name = \"test_key_1\";
+    token_expiration = 3600;
+    bucket_topup_threshold = 1_000_000_000_000;
+    bucket_topup_amount = 5_000_000_000_000;
+  }
+})"
+```
+
+## Retrieving an Access Token from ic_oss_cluster
+After successfully deploying the cluster, you can retrieve an access_token by calling the:
+```aidl
+dfx canister call ic_oss_cluster admin_weak_access_token '(
+  record {
+    subject = principal "4zrxi-26rv2-nspv2-vqmus-ouosp-uuvf4-nxrl3-pfoyg-rn33w-pzv3r-dqe";
+    audience = principal "be2us-64aaa-aaaaa-qaabq-cai";
+    policies = "Folder.Read:0 Folder.Write:0";
+  },
+  1672483200,
+  1672569600
+)'
+```
+
+## Creating Folder 0 in the Bucket
+Once you have obtained the access_token, create a folder named 0 in the bucket by executing the following command:
+```aidl
+dfx canister call ic_oss_bucket create_folder '(
+  record {
+    parent = 0;
+    name = "0";
+  },
+  opt your_access_token
+)'
+```
+
+## Granting univoice-dapp-backend Access to ic_oss_cluster
+Since the univoice-dapp backend will make calls to ic_oss_cluster but is not initially set as a controller or manager, the cluster will reject its requests. To resolve this, you must add the univoice-dapp-backend canister as a controller of the ic_oss_cluster.
+
+- Retrieve the univoice-dapp-backend Canister ID:
+``` dfx canister id univoice-dapp-backend ```
+- Add univoice-dapp-backend as a Controller:
+``` dfx canister update-settings ic_oss_cluster --add-controller <univoice-dapp-backend_canister_id> ```
