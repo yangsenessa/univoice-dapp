@@ -6,6 +6,16 @@ import { isLocalNet } from "@/utils/env";
 import { idlFactory as vmc_idlFactory } from "../idl/univoice-vmc-backend.did.js";
 
 /**
+ * Interface for MainSiteSummary as defined in the .did.js file
+ */
+export interface MainSiteSummary {
+  token_pool_balance: bigint;
+  listener_count: bigint;
+  token_per_block: bigint;
+  aigcblock_created_number: bigint;
+}
+
+/**
  * Utility functions for interacting with the univoice-dapp backend canister
  * @module callbackend
  */
@@ -301,4 +311,23 @@ export async function get_friend_infos(principalId: string): Promise<{
                 console.error("Error fetching friend information:", error);
                 return { friends: [] };
         }
+}
+
+
+/**
+ * Gets the main site summary data from the VMC backend canister
+ * @returns A promise that resolves to the MainSiteSummary object
+ * @throws Will throw an error if the backend call fails
+ */
+export async function get_main_site_summary(): Promise<MainSiteSummary> {
+    try {
+        console.log("Fetching main site summary data");
+        const actor = await createVMCActor();
+        const result = await actor.get_main_site_summary() as MainSiteSummary;
+        console.log("Main site summary data retrieved:", result);
+        return result;
+    } catch (error) {
+        console.error("Error fetching main site summary data:", error);
+        throw error;
+    }
 }

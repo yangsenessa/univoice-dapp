@@ -1,4 +1,4 @@
-// import { tokenLedegerIdlFactory } from '@/idl/icrc1.did.js';
+import { tokenLedegerIdlFactory } from '@/idl/icrc1.did.js';
 // import { icrc7IdlFactory } from '@/idl/icrc7.did.js';
 
 // import { Principal } from '@dfinity/principal';
@@ -57,6 +57,41 @@ export const reConnectPlug = async (): Promise<string> => {
   } catch (e) {
     console.log('connect ic plug exception!', e);
     throw e;
+  }
+}
+
+export const getTotalTransactions = async (): Promise<bigint> => {
+  try {
+    const connected = await plug.isConnected();
+    if (!connected) {
+      console.warn('Wallet not connected when trying to get transaction count. Attempting to reconnect...');
+      try {
+      await reConnectPlug();
+      } catch (e) {
+      console.error('Failed to reconnect Plug wallet:', e);
+      return BigInt(0);
+      }
+    }
+
+    try {
+      const tokenActor = await plug.createActor({
+        canisterId: tokenCanisterId,
+        interfaceFactory: tokenLedegerIdlFactory, // You'll need to import the proper IDL if available
+      });
+      
+      // Call the get_transactions method with minimal parameters to get just the total
+      const response = await tokenActor.get_transactions({ start: 0, length: 1 });
+      // Log the response to debug its structure
+      console.log('Transaction response:', response);
+      // Return the total number of transactions (log_length)
+      return response.log_length || BigInt(0);
+    } catch (error) {
+      console.error('Error getting total transactions (canister may not exist):', error);
+      return BigInt(0); // Return 0 instead of throwing to avoid breaking the UI
+    }
+  } catch (error) {
+    console.error('Unexpected error in getTotalTransactions:', error);
+    return BigInt(0); // Return 0 instead of throwing to avoid breaking the UI
   }
 }
 

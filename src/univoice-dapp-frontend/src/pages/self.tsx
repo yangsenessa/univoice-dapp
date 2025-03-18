@@ -196,31 +196,6 @@ function SelfPage() {
     }
     val = val.replace(/[^\d]/g, ''); // number only
     setSendAmount(val)
-    // let inputVal = val;
-    // inputVal = inputVal.replace(/[^\d.]/g, '');
-    // const parts = inputVal.split('.');
-    // if (parts.length > 2) {
-    //   inputVal = `${parts[0]}.${parts.slice(1).join('')}`;
-    // }
-    // let [integerPart, ...decimalParts] = inputVal.split('.');
-    // const decimalPart = decimalParts.join('');
-
-    // if (integerPart.length > 0) {
-    //   integerPart = integerPart.replace(/^0+/, '') || '0';
-    // } else if (inputVal.includes('.')) {
-    //   integerPart = '0';
-    // }
-
-    // const trimmedDecimal = decimalPart.slice(0, 8);
-
-    // let newValue = integerPart;
-    // if (trimmedDecimal.length > 0 || inputVal.includes('.')) {
-    //   newValue += `.${trimmedDecimal}`;
-    // }
-
-    // if (newValue === '') newValue = '0';
-
-    // setSendAmount(newValue);
   }
 
   const handleSubmitSend = () => {
@@ -416,7 +391,7 @@ function SelfPage() {
       <Modal
         isOpen={mSendConfirmOpen} onClose={onCloseMSendConfirm} overlayClassName={style.abc} contentClassName={style.cdf}>
         <div className="md-title">Confirm</div>
-        <div className={style.sendConfirm}>Are you sure you want to transfer <span className={style.amount}>{Number(sendAmount)}</span> <span className={style.unit}>$UVC</span> from your account to this PRINCIPAL ID?</div>
+        <div className={style.sendConfirm}>Are you sure you want to transfer <span className={style.amount}>{fmtUvBalance(sendAmount)}</span> <span className={style.unit}>$UVC</span> from your account to this PRINCIPAL ID?</div>
         <div className={style.sendConfirmPid}>{sendTargetPId}</div>
         <div className={style.modalBtns}>
           <div className={style.modalBtnOK} onClick={handleConfirmSend}>OK</div>
