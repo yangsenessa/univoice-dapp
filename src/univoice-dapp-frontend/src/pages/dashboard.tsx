@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { fmtInt, fmtUvBalance, fmtTimestamp, fmtSummaryAddr } from '@/utils';
 import style from './dashboard.module.scss'
 import ImgNftThum from '@/assets/imgs/nft_thum.png'
-// import { get_nft_collection } from 'declarations/univoice-dapp-backend/univoice-dapp-backend.did'
+import { get_main_site_summary } from '@/utils/callbackend';
 import { useNavigate } from 'react-router-dom';
+import { getTotalTransactions } from '@/utils/icplug';
 
 function DashboardPage() {
   const navigate = useNavigate();
@@ -24,27 +25,42 @@ function DashboardPage() {
   }, []);
   
   const loadSummary = async() => {
-    let data = {
-      tokenPoolAmount:2100000000000,
-      totalListener: 2100,
-      blockCreatedNumber: 123456,
-      totalTransactions: 123456789123456,
-      blockProduceSpeed: 123.456,
-      tokensPerBlocks: 12345600000000,
+    // Initialize with default data
+    let data = summaryData;
+    
+    try {
+      const mainsite_summary = await get_main_site_summary();
+      data.blockCreatedNumber = Number(mainsite_summary.aigcblock_created_number);
+      data.tokensPerBlocks = Number(mainsite_summary.token_per_block);
+      data.totalListener = Number(mainsite_summary.listener_count);
+      data.tokenPoolAmount = Number(mainsite_summary.token_pool_balance);
+      data.blockProduceSpeed = 900; // Default value as in reference
+      
+      // Update state with what we have so far before potentially failing on transaction fetch
+      setSummaryData({...data});
+      
+      // Get total transactions from the blockchain using getTotalTransactions
+      try {
+        const transactionCount = await getTotalTransactions();
+        data.totalTransactions = Number(transactionCount);
+        setSummaryData({...data});
+      } catch (error) {
+        console.error('Failed to fetch transaction count:', error);
+        // Keep existing data, just log the error
+      }
+    } catch (e) {
+      console.error('Failed to query dashboard data:', e);
+      // Fallback to sample data if the API call fails
+      data = {
+        tokenPoolAmount: 0,
+        totalListener: 0,
+        blockCreatedNumber: 0,
+        totalTransactions: 0,
+        blockProduceSpeed: 0,
+        tokensPerBlocks: 0,
+      };
+      setSummaryData(data);
     }
-    setSummaryData(data);
-    // get_main_site_summary()
-    //   .then(mainsite_summary=>{
-    //     let data = summaryData;
-    //     data.blockCreatedNumber = Number(mainsite_summary.aigcblock_created_number);
-    //     data.tokensPerBlocks = Number(mainsite_summary.token_per_block) ;
-    //     data.totalListener = Number(mainsite_summary.listener_count) ;
-    //     data.tokenPoolAmount = Number(mainsite_summary.token_pool_balance);
-    //     data.blockProduceSpeed = 900;
-    //     setSummaryData(data);
-    //   }).catch(e => {
-    //     toastWarn('Failed to query dashboard data!')
-    //   });
   }
 
   const catchNftImgFail = (event) => {

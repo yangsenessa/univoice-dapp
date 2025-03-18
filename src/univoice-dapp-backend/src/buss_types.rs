@@ -4,13 +4,15 @@ use serde::Serialize;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, Storable, StableBTreeMap, StableVec, storable::Bound};
 use std::cell::RefCell;
-use std::fs;
-use ic_oss_can::types::FileMetadata;
+
+use rand::Rng;
 use crate::constants::INVITE_REWARD;
 use std::option::Option;
 use std::collections::HashMap;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
+// Define TokenAmount as a numeric type for storing token amounts
+type TokenAmount = u64;
 
 #[derive(Clone, CandidType, Deserialize, Serialize)]
 pub struct CommonInfoCfg {
@@ -97,7 +99,7 @@ pub struct CustomInfo {
     pub is_invite_code_filled: bool,
     pub invite_code: String,
     pub used_invite_code: Option<String>,
-    pub total_rewards: u64,
+    pub total_rewards: TokenAmount,
 }
 
 #[derive(Clone, CandidType, Deserialize, Serialize)]
@@ -196,6 +198,11 @@ thread_local! {
 
     static INVITE_CODE_TO_USER_MAP: std::cell::RefCell<HashMap<String, Vec<String>>>
         = std::cell::RefCell::new(HashMap::new());
+    static USER_TASKS_MAP: RefCell<StableBTreeMap<String, UserTasks, Memory>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))
+        )
+    );
 }
 
 pub fn add_info_item(key: String, content: String) -> Result<(), String> {
@@ -213,6 +220,169 @@ pub fn add_info_item(key: String, content: String) -> Result<(), String> {
 pub struct BatchInfoItem {
     pub key: String,
     pub content: String,
+}
+
+#[derive(Clone, CandidType, Deserialize, Serialize)]
+pub struct TaskData {
+    pub task_id: String,
+    pub task_url: String,
+    pub status: String,
+    pub rewards: u64,
+}
+
+#[derive(Clone, CandidType, Deserialize, Serialize)]
+pub struct UserTasks {
+    pub principal_id: String,
+    pub tasks: Vec<TaskData>,
+}
+
+impl Storable for UserTasks {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        let serialized = candid::encode_one(self).expect("Failed to serialize UserTasks");
+        std::borrow::Cow::Owned(serialized)
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        candid::decode_one(&bytes).expect("Failed to deserialize UserTasks")
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 8192,
+        is_fixed_size: false,
+    };
+}
+
+
+fn init_user_tasks(principal_id: String) -> Result<(), String> {
+    USER_TASKS_MAP.with(|store| {
+        let mut store_ref = store.borrow_mut();
+        if store_ref.contains_key(&principal_id) {
+            return Ok(());
+        }
+
+        // Initialize with default tasks
+        let default_tasks = vec![
+            TaskData {
+                task_id: "Follow_X".to_string(),
+                task_url: "https://x.com/UNIVOICE_".to_string(),
+                status: "".to_string(),
+                rewards: 5000,
+            },
+            TaskData {
+                task_id: "Follow_TG_Community".to_string(),
+                task_url: "https://t.me/univoiceofficial".to_string(),
+                status: "".to_string(),
+                rewards: 5000,
+            },
+            TaskData {
+                task_id: "Follow_TG_Channel".to_string(),
+                task_url: "https://t.me/+S3WQWidjW9lkZTU1".to_string(),
+                status: "".to_string(),
+                rewards: 5000,
+            },
+            TaskData {
+                task_id: "Follow_YouTuBe".to_string(),
+                task_url: "https://youtube.com/@univoice-icp?si=v4LRyhzBbW1YZWLJ".to_string(),
+                status: "".to_string(),
+                rewards: 5000,
+            },
+        ];
+
+        let user_tasks = UserTasks {
+            principal_id: principal_id.clone(),
+            tasks: default_tasks,
+        };
+
+        // Log that we're initializing tasks for a new user
+        ic_cdk::println!("Initializing tasks for new user: {}", principal_id.clone());
+        store_ref.insert(principal_id, user_tasks);
+        Ok(())
+    })
+}
+
+pub fn get_user_tasks(principal_id: &str) -> Option<Vec<TaskData>> {
+    USER_TASKS_MAP.with(|store| {
+        let store_ref = store.borrow();
+        if !store_ref.contains_key(&principal_id.to_string()) {
+            // Drop borrow before calling init
+            drop(store_ref);
+            // Initialize tasks if they don't exist
+            let _ = init_user_tasks(principal_id.to_string());
+            // Get the store again after initialization
+            ic_cdk::println!("Get the store again after initialization {}",&principal_id.to_string());
+            let store_ref_new = store.borrow();
+            // Log all keys in store_ref_new for debugging
+            ic_cdk::println!("DEBUG: Keys in store after initialization:");
+            let keys_after_init: Vec<String> = store_ref_new.iter().map(|(k, _)| k.clone()).collect();
+            for key in &keys_after_init {
+                ic_cdk::println!("  - Key: {}", key);
+            }
+            store_ref_new.get(&principal_id.to_string()).map(|user_tasks| user_tasks.tasks)
+        } else {
+            // Log that we're retrieving tasks for an existing user
+            ic_cdk::println!("Retrieving tasks for existing user: {}", &principal_id.to_string().clone());
+            store_ref.get(&principal_id.to_string()).map(|user_tasks| user_tasks.tasks)
+        }
+    })
+}
+
+pub fn update_task_status(principal_id: &str, task_id: &str, status: String) -> Result<(), String> {
+    USER_TASKS_MAP.with(|store| {
+        let mut store_ref = store.borrow_mut();
+        let principal_str = principal_id.to_string();
+
+        // Log all data items in the store for debugging
+        ic_cdk::println!("DEBUG: Printing all user tasks in store");
+        let keys: Vec<String> = store_ref.iter().map(|(k, _)| k.clone()).collect();
+        for key in &keys {
+            ic_cdk::println!("DEBUG: Found key: {}", key);
+        }
+
+        // Check if the user exists in the store before proceeding
+        if !store_ref.contains_key(&principal_str) {
+            ic_cdk::println!("User with ID {} not found", principal_str);
+        
+            return Err(format!("User with ID {} not found", principal_str));
+        }
+        
+        if let Some(user_tasks) = store_ref.get(&principal_str.to_string()) {
+            let mut updated_tasks = user_tasks.clone();
+            let mut task_found = false;
+            
+            for task in &mut updated_tasks.tasks {
+                if task.task_id == task_id {
+                    task.status = status.clone();
+                    task_found = true;
+                    
+                    // If the task is completed, add a task reward record
+                    if status == "FINISH" {
+                        let reward_amount = task.rewards;
+                        match crate::activate_types::add_task_reward(
+                            task_id.to_string(),
+                            principal_id.to_string(),
+                            candid::Nat::from(reward_amount),
+                        ) {
+                            Ok(_) => {
+                                ic_cdk::println!("Task reward added for user {} and task {}", principal_id, task_id);
+                            },
+                            Err(e) => {
+                                ic_cdk::println!("Failed to add task reward: {}", e);
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+            
+            if task_found {
+                store_ref.insert(principal_str.clone(), updated_tasks);
+                return Ok(());
+            } else {
+                return Err(format!("Task with ID {} not found", task_id));
+            }
+        } 
+        Err(format!("Undefine exception "))
+    })
 }
 
 pub fn batch_add_info_items(items: Vec<BatchInfoItem>) -> Result<(), String> {
@@ -269,12 +439,11 @@ pub fn find_custom_info_index(dapp_principal: &str, wallet_principal: &str) -> O
         let store = store.borrow();
         for i in 0..store.len() {
             if let Some(info) = store.get(i) {
-                if !info.wallet_principal.is_empty() && info.wallet_principal == wallet_principal {
+                if !wallet_principal.is_empty() && !info.wallet_principal.is_empty() && info.wallet_principal == wallet_principal {
                     return Some(i);
                 }
 
-                if info.wallet_principal.is_empty() && !info.dapp_principal.is_empty()
-                    && info.dapp_principal == dapp_principal {
+                if !dapp_principal.is_empty() && !info.dapp_principal.is_empty() && info.dapp_principal == dapp_principal {
                     return Some(i);
                 }
             }
@@ -336,6 +505,7 @@ pub fn add_custom_info(info: CustomInfo) -> Result<(), String> {
 
 pub fn get_custom_info(dapp_principal: Option<String>, wallet_principal: Option<String>) -> Option<CustomInfo> {
     if dapp_principal.is_none() && wallet_principal.is_none() {
+        ic_cdk::println!("get_custom_info called with no principal identifiers");
         return None;
     }
 
@@ -372,6 +542,13 @@ pub fn get_custom_info(dapp_principal: Option<String>, wallet_principal: Option<
                 }
             }
         }
+        // Log that we couldn't find a matching custom info
+        if let Some(dapp) = &dapp_principal {
+            ic_cdk::println!("No custom info found for dapp principal: {}", dapp);
+        }
+        if let Some(wallet) = &wallet_principal {
+            ic_cdk::println!("No custom info found for wallet principal: {}", wallet);
+        }
         None
     })
 }
@@ -406,6 +583,31 @@ pub fn update_custom_info(dapp_principal: Option<String>, wallet_principal: Opti
     }
 }
 
+pub fn update_used_invite_code(wallet_principal: String, used_invite_code: Option<String>) -> Result<(), String> {
+    if wallet_principal.is_empty() {
+        return Err("Wallet principal ID cannot be empty".to_string());
+    }
+
+    // Find the index of the custom info
+    let index = find_custom_info_index("", &wallet_principal);
+
+    // Update the used_invite_code if found
+    if let Some(index) = index {
+        CUSTOM_INFO_SET.with(|store| {
+            let mut store = store.borrow_mut();
+            if let Some(mut info) = store.get(index) {
+                info.used_invite_code = used_invite_code;
+                store.set(index, &info);
+                Ok(())
+            } else {
+                Err("Failed to retrieve custom info".to_string())
+            }
+        })
+    } else {
+        Err(format!("No custom info found for wallet principal: {}", wallet_principal))
+    }
+}
+
 pub fn list_custom_info(page: u64, page_size: u64) -> Vec<CustomInfo> {
     CUSTOM_INFO_SET.with(|store| {
         let store = store.borrow();
@@ -420,71 +622,6 @@ pub fn list_custom_info(page: u64, page_size: u64) -> Vec<CustomInfo> {
         (start..end)
             .filter_map(|i| store.get(i))
             .collect()
-    })
-}
-
-pub fn submit_invite_code(dapp_principal: Option<String>, wallet_principal: Option<String>,
-                          used_invite_code: String) -> bool {
-    if dapp_principal.is_none() && wallet_principal.is_none() {
-        ic_cdk::trap("Either dapp_principal or wallet_principal must be provided");
-    }
-
-    let caller_principal = ic_cdk::caller().to_string();
-    let user_principal = wallet_principal
-        .clone()
-        .unwrap_or_else(|| dapp_principal.clone().unwrap_or(caller_principal));
-
-    // Verify if the invitation code corresponds to a real, existing user.
-    let inviter_principal = CUSTOM_INFO_SET.with(|store| {
-        let store = store.borrow();
-        let result = store.iter()
-            .find(|info| info.invite_code == used_invite_code)
-            .map(|info| info.wallet_principal.clone());
-        result
-    });
-    if inviter_principal.is_none() {
-        ic_cdk::println!("Invalid invite code, no matching inviter found: {}", used_invite_code);
-        return false;
-    }
-
-    CUSTOM_INFO_SET.with(|store| {
-        let mut store = store.borrow_mut();
-        let len = store.len();
-
-        for i in 0..len {
-            if let Some(mut info) = store.get(i).map(|v| v.clone()) {
-                if info.wallet_principal == user_principal || info.dapp_principal == user_principal {
-                    if info.is_invite_code_filled {
-                        ic_cdk::println!(
-                            "Invitation code has already been entered, unable to claim the reward again.: {:?}",
-                            user_principal
-                        );
-                        return false;
-                    }
-
-                    info.used_invite_code = Some(used_invite_code.clone());
-                    info.is_invite_code_filled = true;
-                    info.total_rewards += INVITE_REWARD;
-                    store.set(i, &info);
-
-                    ic_cdk::println!(
-                        "User {:?} invitation code submitted successfully，reward {:?}",
-                        user_principal, INVITE_REWARD
-                    );
-
-                    // Maintain the relationship between used_invite_code and the users who entered the invitation code
-                    INVITE_CODE_TO_USER_MAP.with(|map| {
-                        let mut map = map.borrow_mut();
-                        map.entry(used_invite_code.clone()).or_insert_with(Vec::new).push(user_principal.clone());
-                    });
-
-                    return true;
-                }
-            }
-        }
-
-        ic_cdk::println!("User not found, unable to enter the invitation code: {:?}", user_principal);
-        false
     })
 }
 
@@ -561,6 +698,25 @@ pub fn get_quest_list(dapp_principal: Option<String>, wallet_principal: Option<S
 
     QUESTS.with(|quests| quests.borrow().clone())
 }
+// Function to find a CustomInfo by invite code
+// This is needed by the activate_types.rs module
+pub fn find_custom_info_by_invite_code(code: &str) -> Option<CustomInfo> {
+    if code.is_empty() {
+        return None;
+    }
+    
+    CUSTOM_INFO_SET.with(|store| {
+        let store = store.borrow();
+        for i in 0..store.len() {
+            if let Some(info) = store.get(i) {
+                if info.invite_code == code {
+                    return Some(info);
+                }
+            }
+        }
+        None
+    })
+}
 
 pub fn get_invited_users(dapp_principal: Option<String>, wallet_principal: Option<String>) -> InvitedUserResponse {
     if dapp_principal.is_none() && wallet_principal.is_none() {
@@ -612,5 +768,40 @@ fn find_inviter_by_invite_code(invite_code: &String) -> Option<String> {
         let result = store.iter().find(|info| info.invite_code == *invite_code).map(|info| info.wallet_principal.clone());
         result
     })
+}
+
+pub fn generate_random_nickname() -> String {
+    let adjectives = [
+        "Happy", "Swift", "Brave", "Clever", "Gentle", "Jolly", "Kind", "Lively", "Mighty", "Nice",
+        "Polite", "Quiet", "Rapid", "Smart", "Calm", "Eager", "Tough", "Wise", "Zany", "Proud",
+        "Rare", "Bold", "Quick", "Fresh", "Alpha", "Mega", "Ultra", "Super", "Hyper", "Epic",
+        "Agile", "Bright", "Crazy", "Daring", "Elite", "Fancy", "Grand", "Harsh", "Icy", "Jumpy",
+        "Keen", "Lucky", "Magic", "Noble", "Oval", "Prime", "Royal", "Sleek", "Tiny", "Vast",
+        "Wild", "Young", "Zealous", "Amber", "Blue", "Coral", "Deep", "Elated", "Fierce", "Golden",
+        "Humble", "Ideal", "Joyful", "Keen", "Loyal", "Majestic", "Nifty", "Optimal", "Perfect", "Radiant",
+        "Serene", "Tranquil", "Unique", "Vibrant", "Witty", "Exotic", "Yielding", "Zippy", "Active", "Busy",
+        "Cosmic", "Dynamic", "Earnest", "Flying", "Glowing", "Honest", "Intense", "Jubilant", "Kingly", "Luminous",
+        "Mystical", "Natural", "Original", "Peaceful", "Quirky", "Robust", "Shining", "Talented", "Upbeat", "Valiant"
+    ];
+    
+    let nouns = [
+        "Bear", "Eagle", "Tiger", "Panda", "Shark", "Whale", "Hawk", "Lion", "Wolf", "Fox",
+        "Rabbit", "Deer", "Falcon", "Dragon", "Phoenix", "Rocket", "Star", "Moon", "Comet", "Planet",
+        "Ocean", "Mountain", "Forest", "River", "Sky", "Thunder", "Knight", "Ninja", "Samurai", "Hero",
+        "Wizard", "Pirate", "Giant", "Angel", "Titan", "Demon", "Elf", "Dwarf", "Mage", "Ranger",
+        "Rogue", "Warrior", "Bard", "Monk", "Paladin", "Archer", "Hunter", "Scout", "Mystic", "Shaman",
+        "Gladiator", "Viking", "Nomad", "Sage", "Oracle", "Prophet", "Guardian", "Sentinel", "Warden", "Keeper",
+        "Captain", "Chief", "Emperor", "King", "Queen", "Prince", "Princess", "Duke", "Baron", "Champion",
+        "Soldier", "Mariner", "Scholar", "Alchemist", "Inventor", "Explorer", "Pioneer", "Voyager", "Traveler", "Wanderer",
+        "Seeker", "Fighter", "Legend", "Titan", "Colossus", "Leviathan", "Kraken", "Hydra", "Griffin", "Unicorn",
+        "Pegasus", "Sphinx", "Chimera", "Minotaur", "Centaur", "Cyclops", "Golem", "Gargoyle", "Behemoth", "Phantom"
+    ];
+    
+    let mut rng = rand::thread_rng();
+    let adj_idx = rng.gen_range(0..adjectives.len());
+    let noun_idx = rng.gen_range(0..nouns.len());
+    let number = rng.gen_range(1..1000);
+    
+    format!("{}{}{}", adjectives[adj_idx], nouns[noun_idx], number)
 }
 

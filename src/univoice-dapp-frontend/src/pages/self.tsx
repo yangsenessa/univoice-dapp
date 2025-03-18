@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 import { fmtInt, fmtUvBalance, fmtTimestamp, fmtSummaryAddr } from '@/utils';
-import { call_tokens_of, getWalletPrincipal, queryBalance as queryWalletBalance } from '@/utils/wallet'
+import { call_tokens_of, getWalletPrincipal, queryBalance as queryWalletBalance, transfer } from '@/utils/wallet'
 import style from './self.module.scss'
 import ImgNftThum from '@/assets/imgs/nft_thum.png'
 import { toastSuccess, toastError, toastWarn } from '@/components/toast';
 import { ERROR_MSG } from '@/utils/uv_const';
 import { useNavigate } from 'react-router-dom';
 import Modal from '@/components/modal-dialog'
+import { showLoading, hideLoading } from '@/components/loading'
 
 // import {fetch_sumary_for_myvoice, claim_to_account_by_principal, get_miner_jnl} from "@/utils/call_dapp_backend";
 import { useAcountStore } from '@/stores/user';
+import { calculate_total_claimable_rewards, get_unclaimed_rewards } from '@/utils/callbackend';
 function SelfPage() {
   const navigate = useNavigate();
 
@@ -62,7 +64,7 @@ function SelfPage() {
     });
   }, [getPrincipal()]);
   
-  const loadSummary = () => {
+  const loadSummary = async () => {
     let data={
       rewards: '',
       claimable: '',
@@ -81,8 +83,27 @@ function SelfPage() {
     //   }).catch(e => {
     //     toastWarn('Failed to query my performance data!')
     //   });
-    data.claimable = '28541012000000';
-    data.rewards = '28541012000000';
+    // Import the calculate_total_claimable_rewards function
+
+    // Use the function to get the claimable rewards
+    try {
+      const claimableRewards = await calculate_total_claimable_rewards(principal_id);
+      data.claimable = claimableRewards.toString();
+    } catch (error) {
+      console.error("Error calculating claimable rewards:", error);
+      toastWarn('Failed to fetch claimable rewards data');
+      data.claimable = '0';
+    }
+
+    // Set initial rewards to 0 until we have a proper function to fetch it
+    try {
+      const unclaimedRewards = await get_unclaimed_rewards(principal_id);
+      data.rewards = unclaimedRewards.toString();
+    } catch (error) {
+      console.error("Error fetching unclaimed rewards:", error);
+      toastWarn('Failed to fetch rewards data');
+      data.rewards = '0';
+    }
     setSummaryData(data);
   }
 
@@ -123,6 +144,8 @@ function SelfPage() {
     })      
   }
 
+  
+
   const clickClaim = () => {
     if(!getPrincipal()){
       toastWarn('Failed to claim rewards: ' + ERROR_MSG.USER_NOT_AUTH)
@@ -141,6 +164,8 @@ function SelfPage() {
     setMSendOpen(false)
   }
   const openMSend = () => {
+    setSendTargetPId('')
+    setSendAmount('')
     setMSendOpen(true)
   }
 
@@ -157,20 +182,89 @@ function SelfPage() {
   }
 
   const [sendTargetPId, setSendTargetPId] = useState('')
+  const [sendAmount, setSendAmount] = useState('')
 
   // const handleInputSendTarget = (e: React.ChangeEvent<HTMLInputElement>) => {
   //   if (e.target.value.length > 6) return;
   //   setSendTargetPId(e.target.value);
   // };
 
+  const handelInputSendAmout = (val: string) => {
+    if (val.length == 0) {
+      setSendAmount(val)
+      return
+    }
+    val = val.replace(/[^\d]/g, ''); // number only
+    setSendAmount(val)
+  }
+
   const handleSubmitSend = () => {
-    // TODO
-    onCloseMSend();
+    if (!sendTargetPId || !sendAmount) {
+      toastWarn('Please enter both target ID and amount');
+      return;
+    }
+
+    const amount = parseInt(sendAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toastWarn('Please enter a valid amount');
+      return;
+    }
+
+    // Check if wallet balance is sufficient
+    const currentBalance = parseInt(walletBalance || '0');
+    if (amount > currentBalance) {
+      toastError(ERROR_MSG.INSUFFICIENT_FUNDS);
+      return;
+    }
+    openMSendConfirm();
+  }
+
+  const [mSendConfirmOpen, setMSendConfirmOpen] = useState(false)
+  const onCloseMSendConfirm = () => {
+    setMSendConfirmOpen(false)
+  }
+  const openMSendConfirm = () => {
+    setMSendConfirmOpen(true)
+  }
+
+  const handleConfirmSend = async () => {
+    onCloseMSendConfirm()
+    if (!sendTargetPId || !sendAmount) {
+      toastWarn('Please enter both target ID and amount');
+      return;
+    }
+
+    const amount = parseInt(sendAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toastWarn('Please enter a valid amount');
+      return;
+    }
+
+    // Check if wallet balance is sufficient
+    const currentBalance = parseInt(walletBalance || '0');
+    if (amount > currentBalance) {
+      toastError(ERROR_MSG.INSUFFICIENT_FUNDS);
+      return;
+    }
+
+    showLoading()
+    transfer(sendTargetPId, amount)
+      .then((txId) => {
+        hideLoading()
+        toastSuccess(`Transfer successful! Transaction ID: ${txId}`);
+        refreshBalance(); // Refresh balance after successful transfer
+        onCloseMSend()
+      })
+      .catch((error) => {
+        hideLoading()
+        console.error('Error send $uvc:', error);
+        toastError(`Transfer failed: ${error}`);
+      });
   }
   
   return (
     <div className="main-container">
-      <div className={`top-nav-bar ${style.topBar}`}>
+      <div className="top-nav-bar">
         <div className={style.topBarWrapper}>
           <div className={style.btnBack} onClick={handleBack}></div>
           <div className={style.welcome}>Welcome</div>
@@ -274,16 +368,35 @@ function SelfPage() {
         isOpen={mSendOpen} onClose={onCloseMSend} overlayClassName={undefined} contentClassName={undefined}>
         <div className="md-title">Send</div>
         
-        <div className={style.iptSendTarget}>
-          <input
-            type="text"
+        <div className={style.sendLabel}>Principal ID</div>
+        <div className={style.iptSend}>
+          <textarea
+            rows={3}
             placeholder="Enter Target Principal ID"
             value={sendTargetPId}
-            // onChange={handleInputSendTarget}
             onChange={(e) => setSendTargetPId(e.target.value)}
+          ></textarea>
+        </div>
+        <div className={style.sendLabel}>Amount</div>
+        <div className={style.iptSend}>
+          <input
+            type="text"
+            placeholder="Enter amount of tokens to send"
+            value={sendAmount}
+            onChange={(e) => handelInputSendAmout(e.target.value)}
           />
         </div>
         <div className={`${style.btnSubmitSend} btn-1 md-btn-1`} onClick={handleSubmitSend}>Confirm Send</div>
+      </Modal>
+      <Modal
+        isOpen={mSendConfirmOpen} onClose={onCloseMSendConfirm} overlayClassName={style.abc} contentClassName={style.cdf}>
+        <div className="md-title">Confirm</div>
+        <div className={style.sendConfirm}>Are you sure you want to transfer <span className={style.amount}>{fmtUvBalance(sendAmount)}</span> <span className={style.unit}>$UVC</span> from your account to this PRINCIPAL ID?</div>
+        <div className={style.sendConfirmPid}>{sendTargetPId}</div>
+        <div className={style.modalBtns}>
+          <div className={style.modalBtnOK} onClick={handleConfirmSend}>OK</div>
+          <div className={style.modalBtnCancel} onClick={onCloseMSendConfirm}>Cancel</div>
+        </div>
       </Modal>
     </div>
   );

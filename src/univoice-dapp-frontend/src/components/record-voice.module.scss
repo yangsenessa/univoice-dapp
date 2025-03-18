@@ -7,12 +7,11 @@
 }
 .btnRecord {
   position: absolute;
-  bottom: 96px;
+  bottom: 126px;
   background-color: transparent;
   width: 86px;
   height: 86px;
   border-radius: 50px;
-  z-index: 102;
   cursor: pointer;
   // border: 1px solid #FFFFFF;
 }
@@ -20,7 +19,6 @@
   position: absolute;
   font-size: 20px;
   font-weight: 700;
-  z-index: 101;
   bottom: 280px;
 }
 .btnAnimate {
@@ -28,7 +26,6 @@
   bottom: 70px;
   width: 200px;
   height: 200px;
-  z-index: 101;
 }
 .tip {
   position: absolute;
@@ -36,5 +33,4 @@
   font-size: 12px;
   font-weight: 400;
   color: #D9D9D9;
-  z-index: 101;
 }
