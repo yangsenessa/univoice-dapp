@@ -61,32 +61,31 @@
 mod buss_types;
 mod activate_types;
 mod license_types;
-mod voice_types;
 mod constants;
 mod ic_oss_dapp;
+mod voice_oss_type;
 
-use candid::{CandidType, Principal};
-
+use candid::Principal;
 use getrandom::Error;
 use rand::{RngCore, SeedableRng};
 use rand::rngs::SmallRng;
 use rand::Rng;
-use serde::{Deserialize, Serialize};
-use serde_bytes::ByteBuf;
-use std::{borrow::Cow, cell::RefCell, collections::BTreeSet, time::Duration};
-use std::borrow::BorrowMut;
-use ic_oss_can::types::FileMetadata;
-
-use license_types::{NFTCollection, UserLicenseRecord, UserNFTsRequest, UserNFTsResponse};
-use crate::buss_types::{InvitedUserResponse, Quest};
-use ic_oss_types::file::{
-    CreateFileInput, CreateFileOutput, FileInfo, UpdateFileChunkInput,
-    UpdateFileChunkOutput, UpdateFileInput, UpdateFileOutput,
-};
-
+use std::cell::RefCell;
+use ic_cdk::api::time;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, NumTokens};
+
+use crate::voice_oss_type::{
+    VoiceAssetData, MetadataValue, ListVoiceOssParams, VoiceOssInfo,
+    store_voice_asset_data, get_voice_asset_data, delete_voice_asset_data,
+    list_voice_files as oss_list_voice_files
+};
+
+use crate::license_types::{
+    UserNFTsRequest, UserNFTsResponse, NFTCollection, UserLicenseRecord,
+};
+use crate::buss_types::InvitedUserResponse;
 
 thread_local! {
     static RNG: RefCell<Option<SmallRng>> = RefCell::new(None);
@@ -97,7 +96,7 @@ pub fn init_rand() {
 }
 
 fn custom_getrandom(buf: &mut [u8]) -> Result<(), Error> {
-    RNG.with(|mut rng| {
+    RNG.with(|rng| {
         let mut rng = rng.borrow_mut();
         if rng.is_none() {
             *rng = Some(SmallRng::seed_from_u64(42));
@@ -243,7 +242,7 @@ async fn get_nft_collection(collection_id: String) -> Result<NFTCollection, Stri
 async fn buy_nft_license(buyer: String, collection_id: String, quantity: u64) -> Result<(Vec<UserLicenseRecord>, NFTCollection), String> {
     is_called_by_dapp_frontend()?;
 
-    let buyer_principal = Principal::from_text(&buyer)
+    let _buyer_principal = Principal::from_text(&buyer)
         .map_err(|e| format!("Invalid buyer principal: {}", e))?;
 
     let transaction_records = license_types::buy_nft_license(&buyer, &collection_id, quantity).await?;
@@ -284,6 +283,7 @@ async fn get_access_token(wallet_principal: String, bucket_id: String, cluster_i
     is_called_by_dapp_frontend()?;
     ic_oss_dapp::get_access_token(wallet_principal, bucket_id, cluster_id).await
 }
+
 //todo::Update calls consume significantly more cycles than query call
 #[ic_cdk::update]
 fn get_user_tasks(principal_id: String) -> Option<Vec<buss_types::TaskData>> {
@@ -336,11 +336,10 @@ async fn claim_tokens(principal_id: String) -> Result<candid::Nat, String> {
     Ok(amount_transferred)
 }
 
+#[ic_cdk::update]
 async fn transfer_tokens_to_user(user_principal: String, amount: candid::Nat) -> Result<candid::Nat, String> {
     // Get the token canister ID - This should be configured properly
     let token_canister_id = "ryjl3-tyaaa-aaaaa-aaaba-cai"; // Replace with actual token canister ID
-    
-    
     
     let controller = ic_cdk::id();
     
@@ -394,6 +393,85 @@ async fn transfer_tokens_to_user(user_principal: String, amount: candid::Nat) ->
 fn get_friend_infos(owner_principal: String) -> Vec<(buss_types::CustomInfo, candid::Nat)> {
     ic_cdk::println!("Fetching friend infos and rewards for: {}", owner_principal);
     activate_types::get_friend_infos(owner_principal)
+}
+
+/// Records a voice file in the ledger
+#[ic_cdk::update]
+#[candid::candid_method(update)]
+async fn upload_voice_file(
+    principal_id: Principal,
+    folder_id: String,
+    file_id: String,
+    _content: Vec<u8>,
+    custom: Option<Vec<(String, String)>>,
+) -> Result<(), String> {
+    is_called_by_dapp_frontend()?;
+    let now = time();
+    
+    // Convert custom metadata to proper format
+    let metadata = custom.map(|items| {
+        items.into_iter()
+            .map(|(k, v)| (k, MetadataValue::Text(v)))
+            .collect()
+    });
+    
+    // Parse folder_id and file_id from string to u32
+    let folder_id = folder_id.parse::<u32>()
+        .map_err(|_| "Invalid folder ID format".to_string())?;
+    let file_id = file_id.parse::<u32>()
+        .map_err(|_| "Invalid file ID format".to_string())?;
+    
+    let data = VoiceAssetData {
+        principal_id,
+        folder_id,
+        file_id,
+        status: 0, // Active
+        created_at: now,
+        updated_at: Some(now),
+        custom: metadata,
+    };
+
+    store_voice_asset_data(data)
+        .map(|_| ())
+        .map_err(|e| format!("Failed to store voice asset data: {}", e))
+}
+
+/// Marks a voice file as deleted in the ledger
+#[ic_cdk::update]
+#[candid::candid_method(update)]
+async fn delete_voice_file(file_id: String) -> Result<(), String> {
+    is_called_by_dapp_frontend()?;
+    
+    // Parse file_id from string to u64
+    let index = file_id.parse::<u64>()
+        .map_err(|_| "Invalid file ID format".to_string())?;
+    
+    delete_voice_asset_data(index)
+        .map_err(|e| format!("Failed to delete voice asset data: {}", e))
+}
+
+/// Lists voice files with optional filtering
+#[ic_cdk::query]
+#[candid::candid_method(query)]
+fn list_voice_files(
+    principal_id: Option<Principal>,
+    folder_id: Option<String>,
+    _page: Option<u32>,
+    page_size: Option<u32>,
+) -> Vec<VoiceOssInfo> {
+    let params = ListVoiceOssParams {
+        principal_id,
+        folder_id: folder_id.and_then(|f| f.parse::<u32>().ok()),
+        prev: None,
+        take: Some(page_size.unwrap_or(10)),
+    };
+    oss_list_voice_files(params).unwrap_or_default()
+}
+
+/// Gets voice file details by ID
+#[ic_cdk::query]
+fn get_voice_file(id: u64) -> Option<VoiceAssetData> {
+    get_voice_asset_data(id)
 }
 
 ic_cdk::export_candid!();

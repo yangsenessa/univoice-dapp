@@ -88,17 +88,6 @@ type LicenseFetchResult = variant {
     Err: text;
 };
 
-type FileMetadata = record {
-    name: text;
-    content_type: text;
-    size: nat64;
-    filled: nat64;
-    created_at: nat64;
-    updated_at: nat64;
-    chunks: nat32;
-    hash: opt vec nat8;
-};
-
 type Quest = record {
     quest_id: nat64;
     quest_name: text;
@@ -137,6 +126,97 @@ type UserTasks = record {
     tasks: vec TaskData;
 };
 
+type TransferFromArgs = record {
+    from: Account;
+    to: Account;
+    amount: nat;
+    fee: opt nat;
+    memo: opt blob;
+    created_at_time: opt nat64;
+    spender_subaccount: opt blob;
+};
+
+type TransferFromError = variant {
+    BadFee: record { expected_fee: nat };
+    BadBurn: record { min_burn_amount: nat };
+    InsufficientFunds: record { balance: nat };
+    InsufficientAllowance: record { allowance: nat };
+    TooOld;
+    CreatedInFuture: record { ledger_time: nat64 };
+    Duplicate: record { duplicate_of: nat };
+    TemporarilyUnavailable;
+    GenericError: record { error_code: nat; message: text };
+};
+
+type BlockIndex = nat;
+
+type Token = record {
+    subject: principal;
+    audience: principal;
+    policies: text;
+};
+
+type FolderInfo = record {
+    id: nat32;
+    files: vec nat32;
+    status: int8;
+    updated_at: nat64;
+    name: text;
+    folders: vec nat32;
+    created_at: nat64;
+    parent: nat32;
+};
+
+type FileInfo = record {
+    id: nat32;
+    status: int8;
+    updated_at: nat64;
+    name: text;
+    size: nat64;
+    content_type: text;
+    created_at: nat64;
+    filled: nat64;
+    chunks: nat32;
+    parent: nat32;
+};
+
+type FileChunk = record {
+    chunk_index: nat32;
+    content: blob;
+};
+
+type VoiceOssInfo = record {
+    file_id: nat32;
+    status: int8;
+    created_at: nat64;
+    updated_at: opt nat64;
+    custom: opt vec record { text; MetadataValue };
+};
+
+type VoiceAssetData = record {
+    principal_id: principal;
+    folder_id: nat32;
+    file_id: nat32;
+    status: int8;
+    created_at: nat64;
+    updated_at: opt nat64;
+    custom: opt vec record { text; MetadataValue };
+};
+
+type MetadataValue = variant {
+    Int: int64;
+    Nat: nat64;
+    Blob: vec nat8;
+    Text: text;
+};
+
+type ListVoiceOssParams = record {
+    principal_id: opt principal;
+    folder_id: opt nat32;
+    prev: opt nat64;
+    take: opt nat32;
+};
+
 // Service Definition
 service : {
     // Common Info Management
@@ -172,9 +252,18 @@ service : {
     "attach_policies": (text, text, text, text) -> (PolicyResult);
     "detach_policies": (text, text, text, text) -> (PolicyResult);
     "get_access_token": (text, text, text) -> (record { access_token: text; folder: text });
+
     // Token Claiming
     "claim_tokens": (principal_id: text) -> (variant { Ok: nat; Err: text; });
     // Friend Information
     "get_friend_infos": (owner_principal: text) -> (vec record { CustomInfo; nat }) query;
 
+    // Token Transfer
+    "transfer_tokens_to_user": (text, nat) -> (variant { Ok: nat; Err: text; });
+
+    // Voice File Management
+    "record_voice_file": (principal, nat32, nat32, opt vec record { text; MetadataValue }) -> (variant { Ok: nat64; Err: text; });
+    "mark_voice_file_deleted": (nat64) -> (variant { Ok; Err: text; });
+    "list_voice_files": (opt principal, opt nat32, opt nat64, opt nat32) -> (variant { Ok: vec VoiceOssInfo; Err: text; }) query;
+    "get_voice_file": (nat64) -> (opt VoiceAssetData) query;
 };

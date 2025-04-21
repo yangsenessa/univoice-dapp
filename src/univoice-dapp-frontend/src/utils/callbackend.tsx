@@ -4,6 +4,7 @@ import { idlFactory } from "declarations/univoice-dapp-backend/univoice-dapp-bac
 import type { TaskData } from "declarations/univoice-dapp-backend/univoice-dapp-backend.did";
 import { isLocalNet } from "@/utils/env";
 import { idlFactory as vmc_idlFactory } from "../idl/univoice-vmc-backend.did.js";
+import { Principal } from "@dfinity/principal";
 
 /**
  * Interface for MainSiteSummary as defined in the .did.js file
@@ -13,6 +14,48 @@ export interface MainSiteSummary {
   listener_count: bigint;
   token_per_block: bigint;
   aigcblock_created_number: bigint;
+}
+
+/**
+ * Interface for MetadataValue used in voice operations
+ */
+export interface MetadataValue {
+  Int?: bigint;
+  Nat?: bigint;
+  Blob?: Uint8Array;
+  Text?: string;
+}
+
+/**
+ * Interface for Voice Asset Data
+ */
+export interface VoiceAssetData {
+  status: number;
+  updated_at?: bigint;
+  custom?: Array<[string, MetadataValue]>;
+  created_at: bigint;
+  principal_id: Principal;
+  folder_id: number;
+  file_id: number;
+}
+
+/**
+ * Interface for Voice OSS Info
+ */
+export interface VoiceOssInfo {
+  status: number;
+  updated_at?: bigint;
+  custom?: Array<[string, MetadataValue]>;
+  created_at: bigint;
+  file_id: number;
+}
+
+/**
+ * Interface for the access token response
+ */
+export interface AccessTokenResponse {
+  access_token: string;
+  folder: string;
 }
 
 /**
@@ -32,6 +75,7 @@ const createActor = async () => {
     const agent = new HttpAgent({
         host: development ? "http://localhost:4943" : "https://ic0.app",
     });
+    console.log("Callbackend Environment:", development ? "Local" : "Production");
 
     if (development) {
         // Only fetch the root key in development
@@ -328,6 +372,210 @@ export async function get_main_site_summary(): Promise<MainSiteSummary> {
         return result;
     } catch (error) {
         console.error("Error fetching main site summary data:", error);
+        throw error;
+    }
+}
+
+/**
+ * Gets the access token for the OSS bucket
+ * @param principalId - The principal ID to use for authentication
+ * @param paramB - Optional additional parameter (default: empty string)
+ * @param paramC - Optional additional parameter (default: empty string)
+ * @returns A promise that resolves to the access token response object
+ * @throws Will throw an error if the backend call fails
+ */
+export async function get_access_token(
+    principalId: string,
+    paramB: string = "",
+    paramC: string = ""
+): Promise<AccessTokenResponse> {
+    try {
+        console.log("Fetching OSS access token for principal:", principalId);
+        const actor = await createActor();
+        const result = await actor.get_access_token(principalId, paramB, paramC);
+        
+        if (typeof result === 'object' && result !== null && 
+            'access_token' in result && 'folder' in result) {
+            const typedResult = result as AccessTokenResponse;
+            console.log("OSS access token retrieved, folder:", typedResult.folder);
+            return typedResult;
+        } else {
+            throw new Error("Invalid access token response format");
+        }
+    } catch (error) {
+        console.error("Error fetching OSS access token:", error);
+        throw error;
+    }
+}
+
+/**
+ * Records a voice file in the backend
+ * @param principalId - The principal ID of the user
+ * @param folderId - The folder ID in the OSS where the file is stored
+ * @param fileId - The file ID in the OSS
+ * @param metadata - Optional metadata for the file
+ * @returns A promise that resolves to either {Ok: nat64} with the record ID or {Err: string} on failure
+ * @throws Will throw an error if the backend call fails
+ */
+export async function record_voice_file(
+    principalId: string,
+    folderId: number,
+    fileId: number,
+    metadata?: Array<[string, MetadataValue]>
+): Promise<{ Ok: bigint } | { Err: string }> {
+    try {
+        console.log(`Recording voice file: folder=${folderId}, file=${fileId} for principal: ${principalId}`);
+        const actor = await createActor();
+        const principalObj = Principal.fromText(principalId);
+        
+        // Format the metadata for the backend
+        const metadataOpt = metadata ? [metadata] : [];
+        
+        // Call the backend function
+        const result = await actor.record_voice_file(
+            principalObj,
+            folderId,
+            fileId,
+            metadataOpt
+        );
+        
+        // Check if the result is valid
+        if (result && typeof result === 'object') {
+            if ('Ok' in result) {
+                console.log("Voice file recorded successfully:", result.Ok);
+                return { Ok: result.Ok as bigint };
+            } else if ('Err' in result) {
+                console.error("Error recording voice file:", result.Err);
+                return { Err: result.Err as string };
+            }
+        }
+        
+        throw new Error("Invalid response from record_voice_file");
+    } catch (error) {
+        console.error("Error in record_voice_file:", error);
+        return { Err: `Failed to record voice file: ${error.message}` };
+    }
+}
+
+/**
+ * Marks a voice file as deleted in the backend
+ * @param fileId - The ID of the file to mark as deleted
+ * @returns A promise that resolves to either {Ok: null} on success or {Err: string} on failure
+ * @throws Will throw an error if the backend call fails
+ */
+export async function mark_voice_file_deleted(
+    fileId: bigint | number
+): Promise<{ Ok: null } | { Err: string }> {
+    try {
+        console.log(`Marking voice file as deleted: ${fileId}`);
+        const actor = await createActor();
+        
+        // Ensure fileId is a bigint
+        const bigintFileId = typeof fileId === 'number' ? BigInt(fileId) : fileId;
+        
+        // Call the backend function
+        const result = await actor.mark_voice_file_deleted(bigintFileId);
+        
+        // Check if the result is valid
+        if (result && typeof result === 'object') {
+            if ('Ok' in result) {
+                console.log("Voice file marked as deleted successfully");
+                return { Ok: null };
+            } else if ('Err' in result) {
+                console.error("Error marking voice file as deleted:", result.Err);
+                return { Err: result.Err as string };
+            }
+        }
+        
+        throw new Error("Invalid response from mark_voice_file_deleted");
+    } catch (error) {
+        console.error("Error in mark_voice_file_deleted:", error);
+        return { Err: `Failed to mark voice file as deleted: ${error.message}` };
+    }
+}
+
+/**
+ * Lists voice files for a user
+ * @param principalId - The principal ID of the user
+ * @param folderId - Optional folder ID to filter by
+ * @param createdAfter - Optional timestamp to filter files created after
+ * @param limit - Optional limit on the number of files to return
+ * @returns A promise that resolves to either {Ok: VoiceOssInfo[]} or {Err: string} on failure
+ * @throws Will throw an error if the backend call fails
+ */
+export async function list_voice_files(
+    principalId: string,
+    folderId?: number,
+    createdAfter?: bigint,
+    limit?: number
+): Promise<{ Ok: VoiceOssInfo[] } | { Err: string }> {
+    try {
+        console.log(`Listing voice files for principal: ${principalId}`);
+        const actor = await createActor();
+        const principalObj = Principal.fromText(principalId);
+        
+        // Prepare the optional parameters
+        const principalOpt = [principalObj];
+        const folderIdOpt = folderId !== undefined ? [folderId] : [];
+        const createdAfterOpt = createdAfter !== undefined ? [createdAfter] : [];
+        const limitOpt = limit !== undefined ? [limit] : [];
+        
+        // Call the backend function
+        const result = await actor.list_voice_files(
+            principalOpt,
+            folderIdOpt,
+            createdAfterOpt,
+            limitOpt
+        );
+        
+        // Check if the result is valid
+        if (result && typeof result === 'object') {
+            if ('Ok' in result) {
+                const files = result.Ok as VoiceOssInfo[];
+                console.log(`Retrieved ${files.length} voice files`);
+                return { Ok: files };
+            } else if ('Err' in result) {
+                console.error("Error listing voice files:", result.Err);
+                return { Err: result.Err as string };
+            }
+        }
+        
+        throw new Error("Invalid response from list_voice_files");
+    } catch (error) {
+        console.error("Error in list_voice_files:", error);
+        return { Err: `Failed to list voice files: ${error.message}` };
+    }
+}
+
+/**
+ * Gets a voice file from the backend
+ * @param fileId - The ID of the file to get
+ * @returns A promise that resolves to the voice asset data or null if not found
+ * @throws Will throw an error if the backend call fails
+ */
+export async function get_voice_file(
+    fileId: bigint | number
+): Promise<VoiceAssetData | null> {
+    try {
+        console.log(`Getting voice file: ${fileId}`);
+        const actor = await createActor();
+        
+        // Ensure fileId is a bigint
+        const bigintFileId = typeof fileId === 'number' ? BigInt(fileId) : fileId;
+        
+        // Call the backend function
+        const result = await actor.get_voice_file(bigintFileId);
+        
+        // Check if the result exists
+        if (result && Array.isArray(result) && result.length > 0) {
+            console.log("Voice file retrieved successfully");
+            return result[0] as VoiceAssetData;
+        } else {
+            console.log("Voice file not found");
+            return null;
+        }
+    } catch (error) {
+        console.error("Error in get_voice_file:", error);
         throw error;
     }
 }
