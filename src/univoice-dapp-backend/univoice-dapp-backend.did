@@ -217,6 +217,16 @@ type ListVoiceOssParams = record {
     take: opt nat32;
 };
 
+type User_tasks = record {
+    principal_id: text;
+    tasks: vec TaskData;
+};
+
+type CanisterMapping = record {
+    key: text;
+    canister_id: text;
+};
+
 // Service Definition
 service : {
     // Common Info Management
@@ -232,6 +242,32 @@ service : {
     "update_custom_info": (opt text, opt text, text, text) -> (variant { Ok; Err: text; });
     "list_custom_info": (nat64, nat64) -> (vec CustomInfo) query;
     "get_invited_users": (opt text, opt text) -> (InvitedUserResponse) query;
+
+    // Canister Mapping Management
+    "add_canister_mapping": (key: text, canister_id: text) -> (variant { Ok; Err: text; });
+    "get_canister_id": (key: text) -> (opt text) query;
+    "get_all_canister_mappings": () -> (vec CanisterMapping) query;
+    "initialize_default_canisters": () -> (variant { Ok; Err: text; });
+    
+    // Frontend Canister Management
+    "set_frontend_canister": (canister_id: text) -> (variant { Ok; Err: text; });
+    "get_frontend_canister": () -> (opt text) query;
+    
+    // Bulklet Canister Management
+    "set_bucket_canister": (canister_id: text) -> (variant { Ok; Err: text; });
+    "get_bucket_canister": () -> (opt text) query;
+    
+    // Cluster Canister Management
+    "set_cluster_canister": (canister_id: text) -> (variant { Ok; Err: text; });
+    "get_cluster_canister": () -> (opt text) query;
+    
+    // Mugc Canister Management
+    "set_mugc_canister": (canister_id: text) -> (variant { Ok; Err: text; });
+    "get_mugc_canister": () -> (opt text) query;
+    
+    // VMC Canister Management
+    "set_vmc_canister": (canister_id: text) -> (variant { Ok; Err: text; });
+    "get_vmc_canister": () -> (opt text) query;
 
     // user tasks
     "get_user_tasks": (principal_id: text) -> (opt vec TaskData);
@@ -251,7 +287,7 @@ service : {
     //ic_oss
     "attach_policies": (text, text, text, text) -> (PolicyResult);
     "detach_policies": (text, text, text, text) -> (PolicyResult);
-    "get_access_token": (text, text, text) -> (record { access_token: text; folder: text });
+    "get_access_token": (wallet_principal: text) -> (variant { Ok: record { access_token: text; folder: text }; Err: text; });
 
     // Token Claiming
     "claim_tokens": (principal_id: text) -> (variant { Ok: nat; Err: text; });
@@ -262,8 +298,8 @@ service : {
     "transfer_tokens_to_user": (text, nat) -> (variant { Ok: nat; Err: text; });
 
     // Voice File Management
-    "record_voice_file": (principal, nat32, nat32, opt vec record { text; MetadataValue }) -> (variant { Ok: nat64; Err: text; });
-    "mark_voice_file_deleted": (nat64) -> (variant { Ok; Err: text; });
-    "list_voice_files": (opt principal, opt nat32, opt nat64, opt nat32) -> (variant { Ok: vec VoiceOssInfo; Err: text; }) query;
+    "upload_voice_file": (principal, text, text, vec nat8, opt vec record { text; text }) -> (variant { Ok; Err: text; });
+    "delete_voice_file": (text) -> (variant { Ok; Err: text; });
+    "list_voice_files": (opt principal, opt text, opt nat32, opt nat32) -> (vec VoiceOssInfo) query;
     "get_voice_file": (nat64) -> (opt VoiceAssetData) query;
 };

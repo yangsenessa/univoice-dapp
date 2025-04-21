@@ -8,28 +8,49 @@ import { isLocalNet } from "@/utils/env";
  * @module callbackend
  */
 
+// Define global variables for host
+const LOCAL_HOST = "http://localhost:4943";
+const IC_HOST = "https://ic0.app";
 
-const development = isLocalNet();
+// Backend canister IDs - use different IDs for local vs production
+const PROD_BACKEND_CANISTER_ID = "224pv-saaaa-aaaaj-af7qa-cai";
+const LOCAL_BACKEND_CANISTER_ID = "224pv-saaaa-aaaaj-af7qa-cai"; // Use your local canister ID
+const BACKEND_CANISTER_ID = isLocalNet() ? LOCAL_BACKEND_CANISTER_ID : PROD_BACKEND_CANISTER_ID;
 
-// Backend canister ID - use the correct ID from the parent .env file
-const BACKEND_CANISTER_ID = "224pv-saaaa-aaaaj-af7qa-cai";
+console.log("IDL Callbackend Environment:", isLocalNet() ? "Local" : "Production");
+console.log("IDL Host being used:", isLocalNet() ? LOCAL_HOST : IC_HOST);
 console.log("Backend canister ID:", BACKEND_CANISTER_ID);
 
 // Create agent and actor
 const createActor = async () => {
-    const agent = new HttpAgent({
-        host: development ? "http://localhost:4943" : "https://ic0.app",
-    });
-
-    if (development) {
+    let agent;
+    
+    if (isLocalNet()) {
+        // Create an agent for local development with minimal CORS settings
+        agent = new HttpAgent({
+            host: LOCAL_HOST,
+            fetchOptions: {
+                // Don't include credentials to avoid CORS preflight requests
+                credentials: 'omit'
+                // Remove the custom headers that are causing CORS issues
+            }
+        });
+        
         // Only fetch the root key in development
         await agent.fetchRootKey();
+        console.log("IDL: Local agent created with CORS configuration");
+    } else {
+        agent = new HttpAgent({
+            host: IC_HOST
+        });
+        console.log("IDL: Production agent created");
     }
 
-    return Actor.createActor(idlFactory, {
+    // Use type assertions to bypass compatibility issues
+    return Actor.createActor(idlFactory as any, {
         agent,
         canisterId: BACKEND_CANISTER_ID,
-    });
+    }) as any;
 };
 
 /**

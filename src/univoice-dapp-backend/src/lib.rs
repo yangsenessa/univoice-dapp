@@ -122,46 +122,45 @@ fn is_controller() -> Result<(), String> {
 }
 
 fn is_called_by_dapp_frontend() -> Result<(), String> {
-    Ok(())
-    // let caller = ic_cdk::caller();
-    // if caller.to_text() == "be2us-64aaa-aaaaa-qaabq-cai" {
-    //     Ok(())
-    // } else {
-    //     Err("caller is not the frontend canister".to_string())
-    // }
+    return Ok(());  
 }
 
 #[ic_cdk::update]
 async fn add_info_item(key: String, content: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: add_info_item with key: {}", key);
     is_controller()?;
     buss_types::add_info_item(key, content)
 }
 
 #[ic_cdk::query]
 fn get_info_by_key(key: String) -> Option<buss_types::CommonInfoCfg> {
+    ic_cdk::println!("CALL: get_info_by_key with key: {}", key);
     buss_types::get_info_by_key(&key)
 }
 
 #[ic_cdk::update]
 async fn batch_add_info_items(items: Vec<buss_types::BatchInfoItem>) -> Result<(), String> {
+    ic_cdk::println!("CALL: batch_add_info_items with {} items", items.len());
     is_controller()?;
     buss_types::batch_add_info_items(items)
 }
 
 #[ic_cdk::query]
 fn batch_get_info(keys: Vec<String>) -> Vec<Option<buss_types::CommonInfoCfg>> {
+    ic_cdk::println!("CALL: batch_get_info with {} keys", keys.len());
     buss_types::batch_get_info(keys)
 }
 
 #[ic_cdk::update]
 async fn update_info_item(key: String, content: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: update_info_item with key: {}", key);
     is_controller()?;
     buss_types::update_info_item(key, content)
 }
 
 #[ic_cdk::update]
 async fn add_custom_info(mut info: buss_types::CustomInfo) -> Result<(), String> {
-    ic_cdk::println!("call add_custom_info{}", info.wallet_principal);
+    ic_cdk::println!("CALL: add_custom_info for wallet: {}", info.wallet_principal);
     is_called_by_dapp_frontend()?;
 
     // initialization invite_code and is_invite_code_filled
@@ -196,33 +195,39 @@ async fn add_custom_info(mut info: buss_types::CustomInfo) -> Result<(), String>
 
 #[ic_cdk::query]
 fn get_custom_info(dapp_principal: Option<String>, wallet_principal: Option<String>) -> Option<buss_types::CustomInfo> {
+    ic_cdk::println!("CALL: get_custom_info for dapp: {:?}, wallet: {:?}", dapp_principal, wallet_principal);
     buss_types::get_custom_info(dapp_principal, wallet_principal)
 }
 
 #[ic_cdk::update]
 async fn update_custom_info(dapp_principal: Option<String>, wallet_principal: Option<String>, nick_name: String, logo: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: update_custom_info for dapp: {:?}, wallet: {:?}", dapp_principal, wallet_principal);
     is_called_by_dapp_frontend()?;
     buss_types::update_custom_info(dapp_principal, wallet_principal, nick_name, logo)
 }
 
 #[ic_cdk::query]
 fn list_custom_info(page: u64, page_size: u64) -> Vec<buss_types::CustomInfo> {
+    ic_cdk::println!("CALL: list_custom_info with page: {}, page_size: {}", page, page_size);
     buss_types::list_custom_info(page, page_size)
 }
 
 #[ic_cdk::update]
 async fn use_invite_code(code: String, new_user_principalid: String) -> Result<activate_types::InviteRewardRecord, String> {
+    ic_cdk::println!("CALL: use_invite_code with code: {}, new user: {}", code, new_user_principalid);
     is_called_by_dapp_frontend()?;
     activate_types::use_invite_code(code, new_user_principalid)
 }
 
 #[ic_cdk::query]
 fn get_user_rewards(user_principal: String) -> Vec<activate_types::InviteRewardRecord> {
+    ic_cdk::println!("CALL: get_user_rewards for user: {}", user_principal);
     activate_types::get_user_rewards(user_principal)
 }
 
 #[ic_cdk::update]
 async fn get_user_nfts(req: UserNFTsRequest) -> Result<UserNFTsResponse, String> {
+    ic_cdk::println!("CALL: get_user_nfts for user: {}", req.user);
     is_called_by_dapp_frontend()?;
 
     let principal = Principal::from_text(&req.user)
@@ -235,11 +240,13 @@ async fn get_user_nfts(req: UserNFTsRequest) -> Result<UserNFTsResponse, String>
 
 #[ic_cdk::query]
 async fn get_nft_collection(collection_id: String) -> Result<NFTCollection, String> {
+    ic_cdk::println!("CALL: get_nft_collection with ID: {}", collection_id);
     license_types::get_nft_collection(&collection_id).await
 }
 
 #[ic_cdk::update]
 async fn buy_nft_license(buyer: String, collection_id: String, quantity: u64) -> Result<(Vec<UserLicenseRecord>, NFTCollection), String> {
+    ic_cdk::println!("CALL: buy_nft_license for buyer: {}, collection: {}, quantity: {}", buyer, collection_id, quantity);
     is_called_by_dapp_frontend()?;
 
     let _buyer_principal = Principal::from_text(&buyer)
@@ -253,6 +260,7 @@ async fn buy_nft_license(buyer: String, collection_id: String, quantity: u64) ->
 
 #[ic_cdk::update]
 fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<String>, quest_id: u64) -> bool {
+    ic_cdk::println!("CALL: claim_reward for dapp: {:?}, wallet: {:?}, quest: {}", dapp_principal, wallet_principal, quest_id);
     if is_called_by_dapp_frontend().is_err() {
         ic_cdk::println!("Unauthorized access attempt detected.");
         return false;
@@ -263,43 +271,58 @@ fn claim_reward(dapp_principal: Option<String>, wallet_principal: Option<String>
 
 #[ic_cdk::update]
 async fn attach_policies(bucket_id: String, cluster_id: String, principal_id: String, policies: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: attach_policies for bucket: {}, cluster: {}, principal: {}", bucket_id, cluster_id, principal_id);
     is_called_by_dapp_frontend()?;
     ic_oss_dapp::attach_policies(bucket_id, cluster_id, principal_id, policies).await
 }
 
 #[ic_cdk::update]
 async fn detach_policies(bucket_id: String, cluster_id: String, principal_id: String, policies: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: detach_policies for bucket: {}, cluster: {}, principal: {}", bucket_id, cluster_id, principal_id);
     is_called_by_dapp_frontend()?;
     ic_oss_dapp::detach_policies(bucket_id, cluster_id, principal_id, policies).await
 }
 
 #[ic_cdk::query]
 fn get_invited_users(dapp_principal: Option<String>, wallet_principal: Option<String>) -> InvitedUserResponse {
+    ic_cdk::println!("CALL: get_invited_users for dapp: {:?}, wallet: {:?}", dapp_principal, wallet_principal);
     buss_types::get_invited_users(dapp_principal, wallet_principal)
 }
 
 #[ic_cdk::update]
-async fn get_access_token(wallet_principal: String, bucket_id: String, cluster_id: String) -> Result<ic_oss_dapp::AccessTokenResponse, String> {
+async fn get_access_token(wallet_principal: String) -> Result<ic_oss_dapp::AccessTokenResponse, String> {
+    ic_cdk::println!("CALL: get_access_token for wallet: {}", wallet_principal);
     is_called_by_dapp_frontend()?;
-    ic_oss_dapp::get_access_token(wallet_principal, bucket_id, cluster_id).await
+    // Log the result before returning
+    match ic_oss_dapp::get_access_token(wallet_principal).await {
+        Ok(token_response) => {
+            ic_cdk::println!("SUCCESS: get_access_token returned folder: {}", token_response.folder);
+            Ok(token_response)
+        },
+        Err(error) => {
+            ic_cdk::println!("ERROR: get_access_token failed: {}", error);
+            Err(error)
+        }
+    }
 }
 
 //todo::Update calls consume significantly more cycles than query call
 #[ic_cdk::update]
 fn get_user_tasks(principal_id: String) -> Option<Vec<buss_types::TaskData>> {
-    ic_cdk::println!("call get_user_tasks: {}", principal_id);
+    ic_cdk::println!("CALL: get_user_tasks for principal: {}", principal_id);
     buss_types::get_user_tasks(&principal_id)
 }
 
 #[ic_cdk::update]
 async fn update_task_status(principal_id: String, task_id: String, status: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: update_task_status for principal: {}, task: {}, status: {}", principal_id, task_id, status);
     is_called_by_dapp_frontend()?;
-    ic_cdk::println!("call update_task_status: {}", principal_id);
     buss_types::update_task_status(&principal_id, &task_id, status)
 }
 
 #[ic_cdk::query]
 fn get_unclaimed_rewards(user_principal: String) -> candid::Nat {
+    ic_cdk::println!("CALL: get_unclaimed_rewards for user: {}", user_principal);
     // Get unclaimed task rewards
     let task_rewards = activate_types::get_unclaimed_task_rewards(user_principal.clone());
     
@@ -312,6 +335,7 @@ fn get_unclaimed_rewards(user_principal: String) -> candid::Nat {
 
 #[ic_cdk::update]
 async fn claim_tokens(principal_id: String) -> Result<candid::Nat, String> {
+    ic_cdk::println!("CALL: claim_tokens for principal: {}", principal_id);
     is_called_by_dapp_frontend()?;
     
     // Get unclaimed tokens for the user
@@ -338,6 +362,7 @@ async fn claim_tokens(principal_id: String) -> Result<candid::Nat, String> {
 
 #[ic_cdk::update]
 async fn transfer_tokens_to_user(user_principal: String, amount: candid::Nat) -> Result<candid::Nat, String> {
+    ic_cdk::println!("CALL: transfer_tokens_to_user for user: {}, amount: {}", user_principal, amount);
     // Get the token canister ID - This should be configured properly
     let token_canister_id = "ryjl3-tyaaa-aaaaa-aaaba-cai"; // Replace with actual token canister ID
     
@@ -391,8 +416,106 @@ async fn transfer_tokens_to_user(user_principal: String, amount: candid::Nat) ->
 
 #[ic_cdk::query]
 fn get_friend_infos(owner_principal: String) -> Vec<(buss_types::CustomInfo, candid::Nat)> {
-    ic_cdk::println!("Fetching friend infos and rewards for: {}", owner_principal);
+    ic_cdk::println!("CALL: get_friend_infos for owner: {}", owner_principal);
     activate_types::get_friend_infos(owner_principal)
+}
+
+// Canister mapping functions
+#[ic_cdk::update]
+async fn add_canister_mapping(key: String, canister_id: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: add_canister_mapping for key: {}, canister: {}", key, canister_id);
+    is_controller()?;
+    buss_types::add_canister_mapping(key, canister_id)
+}
+
+#[ic_cdk::query]
+fn get_canister_id(key: String) -> Option<String> {
+    ic_cdk::println!("CALL: get_canister_id for key: {}", key);
+    buss_types::get_canister_id(&key)
+}
+
+#[ic_cdk::query]
+fn get_all_canister_mappings() -> Vec<buss_types::CanisterMapping> {
+    ic_cdk::println!("CALL: get_all_canister_mappings");
+    buss_types::get_all_canister_mappings()
+}
+
+#[ic_cdk::update]
+async fn initialize_default_canisters() -> Result<(), String> {
+    ic_cdk::println!("CALL: initialize_default_canisters");
+    is_controller()?;
+    buss_types::initialize_default_canisters()
+}
+
+// Frontend canister specific functions
+#[ic_cdk::update]
+async fn set_frontend_canister(canister_id: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: set_frontend_canister to {}", canister_id);
+    is_controller()?;
+    buss_types::set_frontend_canister(canister_id)
+}
+
+#[ic_cdk::query]
+fn get_frontend_canister() -> Option<String> {
+    ic_cdk::println!("CALL: get_frontend_canister");
+    buss_types::get_frontend_canister()
+}
+
+// Bulklet canister specific functions
+#[ic_cdk::update]
+async fn set_bucket_canister(canister_id: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: set_bulklet_canister to {}", canister_id);
+    is_controller()?;
+    buss_types::set_bulklet_canister(canister_id)
+}
+
+#[ic_cdk::query]
+fn get_bucket_canister() -> Option<String> {
+    ic_cdk::println!("CALL: get_bulklet_canister");
+    buss_types::get_bulklet_canister()
+}
+
+// Cluster canister specific functions
+#[ic_cdk::update]
+async fn set_cluster_canister(canister_id: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: set_cluster_canister to {}", canister_id);
+    is_controller()?;
+    buss_types::set_cluster_canister(canister_id)
+}
+
+#[ic_cdk::query]
+fn get_cluster_canister() -> Option<String> {
+    ic_cdk::println!("CALL: get_cluster_canister");
+    buss_types::get_cluster_canister()
+}
+
+
+// Mugc canister specific functions
+#[ic_cdk::update]
+async fn set_mugc_canister(canister_id: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: set_mugc_canister to {}", canister_id);
+    is_controller()?;
+    buss_types::set_mugc_canister(canister_id)
+}
+
+#[ic_cdk::query]
+fn get_mugc_canister() -> Option<String> {
+    ic_cdk::println!("CALL: get_mugc_canister");
+    buss_types::get_mugc_canister()
+}
+
+// VMC canister specific functions
+#[ic_cdk::update]
+async fn set_vmc_canister(canister_id: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: set_vmc_canister to {}", canister_id);
+    is_controller()?;
+    buss_types::set_vmc_canister(canister_id)
+}
+
+#[ic_cdk::query]
+fn get_vmc_canister() -> Option<String> {
+    ic_cdk::println!("CALL: get_vmc_canister");
+    buss_types::get_vmc_canister()
 }
 
 /// Records a voice file in the ledger
@@ -405,6 +528,7 @@ async fn upload_voice_file(
     _content: Vec<u8>,
     custom: Option<Vec<(String, String)>>,
 ) -> Result<(), String> {
+    ic_cdk::println!("CALL: upload_voice_file for principal: {}, folder: {}, file: {}", principal_id, folder_id, file_id);
     is_called_by_dapp_frontend()?;
     let now = time();
     
@@ -440,6 +564,7 @@ async fn upload_voice_file(
 #[ic_cdk::update]
 #[candid::candid_method(update)]
 async fn delete_voice_file(file_id: String) -> Result<(), String> {
+    ic_cdk::println!("CALL: delete_voice_file with ID: {}", file_id);
     is_called_by_dapp_frontend()?;
     
     // Parse file_id from string to u64
@@ -459,6 +584,7 @@ fn list_voice_files(
     _page: Option<u32>,
     page_size: Option<u32>,
 ) -> Vec<VoiceOssInfo> {
+    ic_cdk::println!("CALL: list_voice_files for principal: {:?}, folder: {:?}, page_size: {:?}", principal_id, folder_id, page_size);
     let params = ListVoiceOssParams {
         principal_id,
         folder_id: folder_id.and_then(|f| f.parse::<u32>().ok()),
@@ -471,6 +597,7 @@ fn list_voice_files(
 /// Gets voice file details by ID
 #[ic_cdk::query]
 fn get_voice_file(id: u64) -> Option<VoiceAssetData> {
+    ic_cdk::println!("CALL: get_voice_file with ID: {}", id);
     get_voice_asset_data(id)
 }
 

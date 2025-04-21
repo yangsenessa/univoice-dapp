@@ -63,30 +63,82 @@ export interface AccessTokenResponse {
  * @module callbackend
  */
 
+// Define global variables for host
+// For local development, we'll use the standard localhost URL
+// The Canister UI usually uses a subdomain like canister-id.localhost
+// But for API calls, we need to use the base localhost address
+const LOCAL_HOST = "http://localhost:4943";
+const IC_HOST = "https://ic0.app";
 
+// Use isLocalNet() to determine the environment
 const development = isLocalNet();
+console.log("Callbackend Environment:", development ? "Local" : "Production");
+console.log("Host being used:", development ? LOCAL_HOST : IC_HOST);
 
-// Backend canister ID - use the correct ID from the parent .env file
-const BACKEND_CANISTER_ID = "224pv-saaaa-aaaaj-af7qa-cai";
+// Backend canister IDs - use different IDs for local vs production
+const PROD_BACKEND_CANISTER_ID = "224pv-saaaa-aaaaj-af7qa-cai";
+const LOCAL_BACKEND_CANISTER_ID = "224pv-saaaa-aaaaj-af7qa-cai"; // Use your local canister ID
+const BACKEND_CANISTER_ID = development ? LOCAL_BACKEND_CANISTER_ID : PROD_BACKEND_CANISTER_ID;
+
 console.log("Backend canister ID:", BACKEND_CANISTER_ID);
 
-// Create agent and actor
-const createActor = async () => {
-    const agent = new HttpAgent({
-        host: development ? "http://localhost:4943" : "https://ic0.app",
-    });
-    console.log("Callbackend Environment:", development ? "Local" : "Production");
+// Define a more specific Actor interface that includes the methods we're calling
+interface BackendActor {
+  get_user_tasks: (principalId: string) => Promise<{ tasks: Array<TaskData> } | { Err: string }>;
+  update_task_status: (principalId: string, taskId: string, status: string) => Promise<{ Ok: null } | { Err: string }>;
+  claim_reward: (dappPrincipalOpt: string[], walletPrincipalOpt: string[], amount: bigint) => Promise<{ Ok: null } | { Err: string }>;
+  add_custom_info: (info: any) => Promise<{ Ok: null } | { Err: string }>;
+  get_custom_info: (dappPrincipalOpt: string[], walletPrincipalOpt: string[]) => Promise<Array<any> | { Err: string }>;
+  get_unclaimed_rewards: (userPrincipal: string) => Promise<bigint>;
+  use_invite_code: (code: string, newUserPrincipalId: string) => Promise<{ Ok: any } | { Err: string }>;
+  get_friend_infos: (principalId: string) => Promise<Array<[any, bigint]>>;
+  get_access_token: (principalId: string) => Promise<{ Ok: AccessTokenResponse } | { Err: string }>;
+  record_voice_file: (principal: Principal, folderId: number, fileId: number, metadataOpt: Array<Array<[string, MetadataValue]>>) => Promise<{ Ok: bigint } | { Err: string }>;
+  mark_voice_file_deleted: (fileId: bigint) => Promise<{ Ok: null } | { Err: string }>;
+  list_voice_files: (principalOpt: Principal[], folderIdOpt: number[], createdAfterOpt: bigint[], limitOpt: number[]) => Promise<{ Ok: VoiceOssInfo[] } | { Err: string }>;
+  get_voice_file: (fileId: bigint) => Promise<Array<VoiceAssetData> | []>;
+  get_cluster_canister: () => Promise<string[]>;
+  get_bucket_canister: () => Promise<string[]>;
+}
 
+interface VmcActor {
+  sum_unclaimed_mint_ledger_onceday: (principalId: string) => Promise<bigint>;
+  get_main_site_summary: () => Promise<MainSiteSummary>;
+}
+
+// Update the createActor function to return the appropriate interface
+export async function createActor(): Promise<BackendActor> {
+  try {
+    let agent: HttpAgent;
+    // Use isLocalNet() to determine the environment
     if (development) {
-        // Only fetch the root key in development
-        await agent.fetchRootKey();
+      // Create an agent for local development with minimal CORS settings
+      agent = new HttpAgent({ 
+        host: LOCAL_HOST,
+        fetchOptions: {
+          // Don't include credentials to avoid CORS preflight requests
+          credentials: 'omit'
+          // Remove the custom headers that are causing CORS issues
+        }
+      });
+      // In development, we don't verify the certificate
+      await agent.fetchRootKey();
+      console.log("Local agent created with CORS configuration");
+    } else {
+      agent = new HttpAgent({ host: IC_HOST });
+      console.log("Production agent created");
     }
 
-    return Actor.createActor(idlFactory, {
-        agent,
-        canisterId: BACKEND_CANISTER_ID,
-    });
-};
+    // Use type assertion to bypass the compatibility issues
+    return Actor.createActor(idlFactory as any, {
+      agent,
+      canisterId: BACKEND_CANISTER_ID,
+    }) as unknown as BackendActor;
+  } catch (error) {
+    console.error("Error creating actor:", error);
+    throw error;
+  }
+}
 
 /**
  * Gets user tasks from the backend canister
@@ -96,18 +148,23 @@ const createActor = async () => {
  */
 export async function get_user_tasks(principalId: string): Promise<TaskData[] | null> {
     try {
-        console.log("Fetching tasks for principal ID:", principalId);
+        console.log("Fetching tasks for principal:", principalId);
         const actor = await createActor();
-        const result = await actor.get_user_tasks(principalId) as TaskData[][];
-        
-        if (result.length === 0) {
+        const result = await actor.get_user_tasks(principalId) as { tasks: Array<TaskData> } | { Err: string };
+
+        if ('tasks' in result) {
+            console.log("Tasks retrieved:", result.tasks);
+            return result.tasks;
+        } else if ('Err' in result) {
+            console.error("Error from backend:", result.Err);
+            return null;
+        } else {
+            console.error("Unexpected response format:", result);
             return null;
         }
-        console.log("User tasks retrieved:", result[0]);
-        return result[0]; // The API returns [Array<TaskData>] or []
     } catch (error) {
-        console.error("Error fetching user tasks:", error);
-        throw error;
+        console.error("Error fetching tasks:", error);
+        return null;
     }
 }
 
@@ -124,12 +181,14 @@ export async function update_task_status(
     status: string
 ): Promise<{ Ok: null } | { Err: string }> {
     try {
+        console.log(`Updating task ${taskId} status to ${status} for principal: ${principalId}`);
         const actor = await createActor();
         const result = await actor.update_task_status(principalId, taskId, status) as { Ok: null } | { Err: string };
+        console.log("Task status update result:", result);
         return result;
     } catch (error) {
         console.error("Error updating task status:", error);
-        return { Err: `Failed to update task status: ${error.message}` };
+        return { Err: `Update task status failed: ${error.message}` };
     }
 }
 
@@ -146,18 +205,31 @@ export async function claim_reward(
     amount: bigint
 ): Promise<boolean> {
     try {
+        console.log(`Claiming reward of ${amount} with dapp principal: ${dappPrincipalId}, wallet principal: ${walletPrincipalId}`);
+        
+        if (!dappPrincipalId && !walletPrincipalId) {
+            throw new Error("At least one principal ID must be provided");
+        }
+        
         const actor = await createActor();
-        const result = await actor.claim_reward(
-            dappPrincipalId ? [dappPrincipalId] : [], 
-            walletPrincipalId ? [walletPrincipalId] : [], 
-            amount
-        );
-        return Boolean(result);
+        const dappPrincipalOpt = dappPrincipalId ? [dappPrincipalId] : [];
+        const walletPrincipalOpt = walletPrincipalId ? [walletPrincipalId] : [];
+        
+        const result = await actor.claim_reward(dappPrincipalOpt, walletPrincipalOpt, amount) as { Ok: null } | { Err: string };
+        
+        if ('Ok' in result) {
+            console.log("Reward claimed successfully");
+            return true;
+        } else {
+            console.error("Error claiming reward:", result.Err);
+            return false;
+        }
     } catch (error) {
         console.error("Error claiming reward:", error);
         return false;
     }
 }
+
 /**
  * Adds custom information for a user to the backend canister
  * @param customInfo - The custom information object to add
@@ -170,22 +242,31 @@ export async function add_custom_info(customInfo: {
     logo: string;
     is_invite_code_filled: boolean;
     invite_code: string;
-    used_invite_code: string | [] | [string];  // 更灵活的类型定义，兼容多种形式的opt text
+    used_invite_code: string | [] | [string];
     total_rewards: bigint;
 }): Promise<{ Ok: null } | { Err: string }> {
     try {
-        // 处理used_invite_code字段，确保发送给Candid接口的是正确格式
-        const processedInfo = {
-            ...customInfo,
-            used_invite_code: typeof customInfo.used_invite_code === "string" 
-                ? [customInfo.used_invite_code] 
-                : customInfo.used_invite_code
-        };
-        
-        console.log("Adding custom info:", processedInfo);
         const actor = await createActor();
-        const result = await actor.add_custom_info(processedInfo) as { Ok: null } | { Err: string };
-        console.log("Custom info add result:", result);
+        
+        console.log("Adding custom info for user:", customInfo.dapp_principal);
+        
+        // Format used_invite_code as expected by the backend
+        const used_invite_code = Array.isArray(customInfo.used_invite_code) 
+            ? customInfo.used_invite_code 
+            : (customInfo.used_invite_code ? [customInfo.used_invite_code] : []);
+        
+        const result = await actor.add_custom_info({
+            dapp_principal: customInfo.dapp_principal,
+            wallet_principal: customInfo.wallet_principal,
+            nick_name: customInfo.nick_name,
+            logo: customInfo.logo,
+            is_invite_code_filled: customInfo.is_invite_code_filled,
+            invite_code: customInfo.invite_code,
+            used_invite_code: used_invite_code,
+            total_rewards: customInfo.total_rewards
+        }) as { Ok: null } | { Err: string };
+        
+        console.log("Add custom info result:", result);
         return result;
     } catch (error) {
         console.error("Error adding custom info:", error);
@@ -204,38 +285,74 @@ export async function get_custom_info(
     walletPrincipalId: string | null = null
 ): Promise<any | null> {
     try {
-        const actor = await createActor();
-        const result = await actor.get_custom_info(
-            dappPrincipalId ? [dappPrincipalId] : [], 
-            walletPrincipalId ? [walletPrincipalId] : []
-        );
+        if (!dappPrincipalId && !walletPrincipalId) {
+            throw new Error("At least one principal ID must be provided");
+        }
         
-        const resultArray = Array.isArray(result) ? result : [];
-        return resultArray.length > 0 ? resultArray[0] : null;
+        console.log("Fetching custom info with:", { dappPrincipalId, walletPrincipalId });
+        
+        const actor = await createActor();
+        const dappPrincipalOpt = dappPrincipalId ? [dappPrincipalId] : [];
+        const walletPrincipalOpt = walletPrincipalId ? [walletPrincipalId] : [];
+        
+        const result = await actor.get_custom_info(dappPrincipalOpt, walletPrincipalOpt) as Array<any> | { Err: string };
+        
+        if (Array.isArray(result) && result.length > 0) {
+            console.log("Custom info retrieved:", result[0]);
+            return result[0];
+        } else if ('Err' in result) {
+            console.error("Error from backend:", result.Err);
+            return null;
+        } else {
+            console.log("No custom info found");
+            return null;
+        }
     } catch (error) {
         console.error("Error fetching custom info:", error);
         return null;
     }
 }
 
-/**
- * Creates an actor for the VMC backend canister
- * @returns A promise that resolves to the VMC backend actor
- */
-const createVMCActor = async () => {
-    const agent = new HttpAgent({
-        host: development ? "http://localhost:4943" : "https://ic0.app",
-    });
-
+// Update the VMC actor function to return the appropriate interface
+async function createVMCActor(): Promise<VmcActor> {
+  try {
+    let agent: HttpAgent;
+    // Use isLocalNet() to determine the environment
     if (development) {
-        await agent.fetchRootKey();
+      // Create an agent for local development with minimal CORS settings
+      agent = new HttpAgent({ 
+        host: LOCAL_HOST,
+        fetchOptions: {
+          // Don't include credentials to avoid CORS preflight requests
+          credentials: 'omit'
+          // Remove the custom headers that are causing CORS issues
+        }
+      });
+      // In development, we don't verify the certificate
+      await agent.fetchRootKey();
+      console.log("Local VMC agent created with CORS configuration");
+    } else {
+      agent = new HttpAgent({ host: IC_HOST });
+      console.log("Production VMC agent created");
     }
 
-    return Actor.createActor(vmc_idlFactory, {
-        agent,
-        canisterId: "bw4dl-smaaa-aaaaa-qaacq-cai", // VMC backend canister ID
-    });
-};
+    // VMC canister IDs - use different IDs for local vs production
+    const PROD_VMC_CANISTER_ID = "bw4dl-smaaa-aaaaa-qaacq-cai";
+    const LOCAL_VMC_CANISTER_ID = "be2us-64aaa-aaaaa-qaabq-cai"; // Use your local VMC canister ID
+    const VMC_CANISTER_ID = development ? LOCAL_VMC_CANISTER_ID : PROD_VMC_CANISTER_ID;
+    
+    console.log("VMC canister ID:", VMC_CANISTER_ID);
+
+    // Use type assertion to bypass the compatibility issues
+    return Actor.createActor(vmc_idlFactory as any, {
+      agent,
+      canisterId: VMC_CANISTER_ID,
+    }) as unknown as VmcActor;
+  } catch (error) {
+    console.error("Error creating VMC actor:", error);
+    throw error;
+  }
+}
 
 /**
  * Gets unclaimed mint ledger balance for a principal within the last day
@@ -334,7 +451,7 @@ export async function get_friend_infos(principalId: string): Promise<{
 }> {
         try {
                 const actor = await createActor();
-                const result = await actor.get_friend_infos(principalId);
+                const result = await actor.get_friend_infos(principalId) as Array<[any, bigint]>;
                 console.log("Friend information retrieved:", result);
                 
                 // Process the result based on the DID definition that returns vec record { CustomInfo; nat }
@@ -379,29 +496,36 @@ export async function get_main_site_summary(): Promise<MainSiteSummary> {
 /**
  * Gets the access token for the OSS bucket
  * @param principalId - The principal ID to use for authentication
- * @param paramB - Optional additional parameter (default: empty string)
- * @param paramC - Optional additional parameter (default: empty string)
  * @returns A promise that resolves to the access token response object
  * @throws Will throw an error if the backend call fails
  */
 export async function get_access_token(
-    principalId: string,
-    paramB: string = "",
-    paramC: string = ""
+    principalId: string
 ): Promise<AccessTokenResponse> {
     try {
         console.log("Fetching OSS access token for principal:", principalId);
         const actor = await createActor();
-        const result = await actor.get_access_token(principalId, paramB, paramC);
-        
-        if (typeof result === 'object' && result !== null && 
-            'access_token' in result && 'folder' in result) {
-            const typedResult = result as AccessTokenResponse;
-            console.log("OSS access token retrieved, folder:", typedResult.folder);
-            return typedResult;
-        } else {
-            throw new Error("Invalid access token response format");
+        // Only pass the principalId parameter as the backend only expects one parameter
+        const result = await actor.get_access_token(principalId) as { Ok: AccessTokenResponse } | { Err: string };
+        console.log("OSS access token result:", JSON.stringify(result, null, 2));
+        if (typeof result === 'object' && result !== null) {
+            // The response is a variant with { Ok: { access_token, folder } } or { Err: string }
+            if ('Ok' in result && result.Ok && typeof result.Ok === 'object') {
+                const okResult = result.Ok;
+                if ('access_token' in okResult && 'folder' in okResult) {
+                    const typedResult = {
+                        access_token: okResult.access_token as string,
+                        folder: okResult.folder as string
+                    };
+                    console.log("OSS access token retrieved, folder:", typedResult.folder);
+                    return typedResult;
+                }
+            } else if ('Err' in result) {
+                throw new Error(`Backend error: ${result.Err}`);
+            }
         }
+        
+        throw new Error("Invalid access token response format");
     } catch (error) {
         console.error("Error fetching OSS access token:", error);
         throw error;
@@ -418,15 +542,19 @@ export async function get_access_token(
  * @throws Will throw an error if the backend call fails
  */
 export async function record_voice_file(
-    principalId: string,
+    principalId: string | Principal,
     folderId: number,
     fileId: number,
     metadata?: Array<[string, MetadataValue]>
 ): Promise<{ Ok: bigint } | { Err: string }> {
     try {
-        console.log(`Recording voice file: folder=${folderId}, file=${fileId} for principal: ${principalId}`);
+        // Convert principalId to Principal if it's a string
+        const principalObj = typeof principalId === 'string' 
+            ? Principal.fromText(principalId) 
+            : principalId;
+        
+        console.log(`Recording voice file: folder=${folderId}, file=${fileId} for principal: ${principalObj.toString()}`);
         const actor = await createActor();
-        const principalObj = Principal.fromText(principalId);
         
         // Format the metadata for the backend
         const metadataOpt = metadata ? [metadata] : [];
@@ -437,7 +565,7 @@ export async function record_voice_file(
             folderId,
             fileId,
             metadataOpt
-        );
+        ) as { Ok: bigint } | { Err: string };
         
         // Check if the result is valid
         if (result && typeof result === 'object') {
@@ -474,7 +602,7 @@ export async function mark_voice_file_deleted(
         const bigintFileId = typeof fileId === 'number' ? BigInt(fileId) : fileId;
         
         // Call the backend function
-        const result = await actor.mark_voice_file_deleted(bigintFileId);
+        const result = await actor.mark_voice_file_deleted(bigintFileId) as { Ok: null } | { Err: string };
         
         // Check if the result is valid
         if (result && typeof result === 'object') {
@@ -504,15 +632,19 @@ export async function mark_voice_file_deleted(
  * @throws Will throw an error if the backend call fails
  */
 export async function list_voice_files(
-    principalId: string,
+    principalId: string | Principal,
     folderId?: number,
     createdAfter?: bigint,
     limit?: number
 ): Promise<{ Ok: VoiceOssInfo[] } | { Err: string }> {
     try {
-        console.log(`Listing voice files for principal: ${principalId}`);
+        // Convert principalId to Principal if it's a string
+        const principalObj = typeof principalId === 'string' 
+            ? Principal.fromText(principalId) 
+            : principalId;
+            
+        console.log(`Listing voice files for principal: ${principalObj.toString()}`);
         const actor = await createActor();
-        const principalObj = Principal.fromText(principalId);
         
         // Prepare the optional parameters
         const principalOpt = [principalObj];
@@ -526,7 +658,7 @@ export async function list_voice_files(
             folderIdOpt,
             createdAfterOpt,
             limitOpt
-        );
+        ) as { Ok: VoiceOssInfo[] } | { Err: string };
         
         // Check if the result is valid
         if (result && typeof result === 'object') {
@@ -564,7 +696,7 @@ export async function get_voice_file(
         const bigintFileId = typeof fileId === 'number' ? BigInt(fileId) : fileId;
         
         // Call the backend function
-        const result = await actor.get_voice_file(bigintFileId);
+        const result = await actor.get_voice_file(bigintFileId) as Array<VoiceAssetData> | [];
         
         // Check if the result exists
         if (result && Array.isArray(result) && result.length > 0) {

@@ -14,6 +14,7 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 // Define TokenAmount as a numeric type for storing token amounts
 type TokenAmount = u64;
 
+
 #[derive(Clone, CandidType, Deserialize, Serialize)]
 pub struct CommonInfoCfg {
     pub key: String,
@@ -202,6 +203,12 @@ thread_local! {
         StableBTreeMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))
         )
+    );
+
+    static CANISTER_MAPPINGS: RefCell<StableVec<CanisterMapping, Memory>> = RefCell::new(
+        StableVec::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3)))
+        ).unwrap()
     );
 }
 
@@ -803,5 +810,173 @@ pub fn generate_random_nickname() -> String {
     let number = rng.gen_range(1..1000);
     
     format!("{}{}{}", adjectives[adj_idx], nouns[noun_idx], number)
+}
+
+#[derive(Clone, CandidType, Deserialize, Serialize)]
+pub struct CanisterMapping {
+    pub key: String,
+    pub canister_id: String,
+}
+
+impl Storable for CanisterMapping {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        let serialized = candid::encode_one(self).expect("Failed to serialize CanisterMapping");
+        std::borrow::Cow::Owned(serialized)
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        candid::decode_one(&bytes).expect("Failed to deserialize CanisterMapping")
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 1024,
+        is_fixed_size: false,
+    };
+}
+
+impl CanisterMapping {
+    pub fn new(key: String, canister_id: String) -> Self {
+        CanisterMapping {
+            key,
+            canister_id,
+        }
+    }
+}
+
+// Add a new canister mapping
+pub fn add_canister_mapping(key: String, canister_id: String) -> Result<(), String> {
+    if key.is_empty() || canister_id.is_empty() {
+        return Err("Key and canister_id cannot be empty".to_string());
+    }
+
+    CANISTER_MAPPINGS.with(|store| {
+        let mut store = store.borrow_mut();
+        
+        // Check if the key already exists - search inline to avoid double borrowing
+        let mut existing_index = None;
+        for i in 0..store.len() {
+            if let Some(mapping) = store.get(i) {
+                if mapping.key == key {
+                    existing_index = Some(i);
+                    break;
+                }
+            }
+        }
+        
+        if let Some(index) = existing_index {
+            // Update existing mapping
+            let mapping = CanisterMapping::new(key.clone(), canister_id);
+            store.set(index, &mapping);
+        } else {
+            // Add new mapping
+            let mapping = CanisterMapping::new(key.clone(), canister_id);
+            store.push(&mapping)
+                .map_err(|e| format!("Failed to store canister mapping: {}", e))?;
+        }
+        
+        Ok(())
+    })
+}
+
+// Find a canister mapping by key
+fn find_canister_mapping_index(key: &str) -> Option<u64> {
+    CANISTER_MAPPINGS.with(|store| {
+        let store = store.borrow();
+        for i in 0..store.len() {
+            if let Some(mapping) = store.get(i) {
+                if mapping.key == key {
+                    return Some(i);
+                }
+            }
+        }
+        None
+    })
+}
+
+// Get a canister ID by key
+pub fn get_canister_id(key: &str) -> Option<String> {
+    if key.is_empty() {
+        return None;
+    }
+    
+    CANISTER_MAPPINGS.with(|store| {
+        let store = store.borrow();
+        for i in 0..store.len() {
+            if let Some(mapping) = store.get(i) {
+                if mapping.key == key {
+                    return Some(mapping.canister_id.clone());
+                }
+            }
+        }
+        None
+    })
+}
+
+// Get all canister mappings
+pub fn get_all_canister_mappings() -> Vec<CanisterMapping> {
+    CANISTER_MAPPINGS.with(|store| {
+        let store = store.borrow();
+        (0..store.len())
+            .filter_map(|i| store.get(i))
+            .collect()
+    })
+}
+
+// Specific canister type implementations
+
+// Frontend canister
+pub fn set_frontend_canister(canister_id: String) -> Result<(), String> {
+    add_canister_mapping("frontend".to_string(), canister_id)
+}
+
+pub fn get_frontend_canister() -> Option<String> {
+    get_canister_id("frontend")
+}
+
+// Bulklet canister
+pub fn set_bulklet_canister(canister_id: String) -> Result<(), String> {
+    add_canister_mapping("bulklet".to_string(), canister_id)
+}
+
+pub fn get_bulklet_canister() -> Option<String> {
+    get_canister_id("bulklet")
+}
+
+// Mugc/Muge canister
+pub fn set_mugc_canister(canister_id: String) -> Result<(), String> {
+    add_canister_mapping("mugc".to_string(), canister_id)
+}
+
+pub fn get_mugc_canister() -> Option<String> {
+    get_canister_id("mugc")
+}
+
+// Cluster canister
+pub fn set_cluster_canister(canister_id: String) -> Result<(), String> {
+    add_canister_mapping("cluster".to_string(), canister_id)
+}
+
+pub fn get_cluster_canister() -> Option<String> {
+    get_canister_id("cluster")
+}
+
+
+// VMC canister
+pub fn set_vmc_canister(canister_id: String) -> Result<(), String> {
+    add_canister_mapping("vmc".to_string(), canister_id)
+}
+
+pub fn get_vmc_canister() -> Option<String> {
+    get_canister_id("vmc")
+}
+
+// Initialize default canisters with empty IDs
+pub fn initialize_default_canisters() -> Result<(), String> {
+    set_frontend_canister("".to_string())?;
+    set_bulklet_canister("".to_string())?;
+    set_mugc_canister("".to_string())?;
+    set_cluster_canister("".to_string())?;
+    set_vmc_canister("".to_string())?;
+    Ok(())
 }
 
