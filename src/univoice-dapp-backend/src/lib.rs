@@ -584,14 +584,41 @@ fn list_voice_files(
     _page: Option<u32>,
     page_size: Option<u32>,
 ) -> Vec<VoiceOssInfo> {
-    ic_cdk::println!("CALL: list_voice_files for principal: {:?}, folder: {:?}, page_size: {:?}", principal_id, folder_id, page_size);
+    ic_cdk::println!("CALL: list_voice_files for principal: {:?}, folder: {:?}, page: {:?}, page_size: {:?}", 
+                     principal_id, folder_id, _page, page_size);
+    
+    // Calculate prev based on page and page_size for proper pagination
+    // For page 1, prev should be None (start from the beginning)
+    // For page > 1, prev should be (page-1) * page_size
+    let page = _page.unwrap_or(1);
+    let size = page_size.unwrap_or(10);
+    let prev = if page > 1 {
+        // Convert all values to u64 before multiplying to avoid type mismatch
+        Some((page as u64 - 1) * size as u64)
+    } else {
+        None
+    };
+    
     let params = ListVoiceOssParams {
         principal_id,
         folder_id: folder_id.and_then(|f| f.parse::<u32>().ok()),
-        prev: None,
-        take: Some(page_size.unwrap_or(10)),
+        prev,
+        take: Some(size),
     };
-    oss_list_voice_files(params).unwrap_or_default()
+    
+    ic_cdk::println!("Pagination params: page={:?}, size={:?}, prev={:?}", page, size, prev);
+    let result = oss_list_voice_files(params);
+    match &result {
+        Ok(files) => {
+            ic_cdk::println!("Found {} voice files in response", files.len());
+            for (i, file) in files.iter().enumerate() {
+                ic_cdk::println!("File {}: file_id={}, status={}, created_at={}, has_custom_data={}", 
+                    i, file.file_id, file.status, file.created_at, file.custom.is_some());
+            }
+        },
+        Err(e) => ic_cdk::println!("Error listing voice files: {}", e),
+    }
+    result.unwrap_or_default()
 }
 
 /// Gets voice file details by ID

@@ -40,6 +40,9 @@ export default defineConfig({
     // Make sure to include all required files for deployment
     assetsInlineLimit: 0,
   },
+  base: process.env.NODE_ENV === 'production' 
+    ? '/' 
+    : '/',
   optimizeDeps: {
     esbuildOptions: {
       define: {
@@ -53,10 +56,31 @@ export default defineConfig({
         target: "http://127.0.0.1:4943",
         changeOrigin: true,
       },
+      "/api/v2/status": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path
+      },
+      // Add proxy for assets
+      "/assets": {
+        target: "http://127.0.0.1:4943",
+        changeOrigin: true,
+        rewrite: (path) => path
+      },
     },
     port: 4944,
     https: createCertificates(),
+    // Add CORS configuration
+    cors: {
+      origin: ['http://localhost:*', 'http://*.localhost:4943', 'http://224r2-ziaaa-aaaah-aol2a-cai.localhost:4943'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      credentials: true
+    },
     headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'X-Requested-With, Content-Type, Authorization',
       'Content-Security-Policy': "default-src 'self'; connect-src *; worker-src 'self' blob:; script-src 'self' blob: 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:;",
       'Permissions-Policy': "microphone=(self)"
     }

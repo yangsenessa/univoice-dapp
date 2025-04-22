@@ -187,7 +187,7 @@ type FileChunk = record {
 
 type VoiceOssInfo = record {
     file_id: nat32;
-    status: int8;
+    status: int32;
     created_at: nat64;
     updated_at: opt nat64;
     custom: opt vec record { text; MetadataValue };
@@ -197,7 +197,7 @@ type VoiceAssetData = record {
     principal_id: principal;
     folder_id: nat32;
     file_id: nat32;
-    status: int8;
+    status: int32;
     created_at: nat64;
     updated_at: opt nat64;
     custom: opt vec record { text; MetadataValue };

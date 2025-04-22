@@ -19,7 +19,7 @@ export default defineConfig({
     open: true,
     // Handle CORS issues
     cors: {
-      origin: ['http://localhost:5000'],
+      origin: ['http://localhost:5000', 'http://localhost:4943', 'http://*.localhost:4943', 'http://224r2-ziaaa-aaaah-aol2a-cai.localhost:4943'],
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       credentials: true
     },
@@ -29,13 +29,19 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      "/api/v2/status": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path
+      },
     },
     headers: {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "X-Requested-With, Content-Type, Authorization",
       // Updated Content Security Policy to allow LottieFiles CDN connections
-      "Content-Security-Policy": "default-src 'self'; connect-src 'self' http://localhost:* https://icp0.io https://*.icp0.io https://icp-api.io https://cdn.jsdelivr.net https://*.jsdelivr.net https://unpkg.com https://*.unpkg.com; worker-src 'self' blob:; script-src 'self' blob: 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:;",
+      "Content-Security-Policy": "default-src 'self'; connect-src 'self' http://localhost:* https://icp0.io https://*.icp0.io https://icp-api.io https://cdn.jsdelivr.net https://*.jsdelivr.net https://unpkg.com https://*.unpkg.com; worker-src 'self' blob:; script-src 'self' blob: 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:;",
       "Permissions-Policy": "microphone=(self)"
     }
   },

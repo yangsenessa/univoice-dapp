@@ -4,6 +4,36 @@ import voicePng from '@/assets/imgs/voice.png';
 import { getAudioDuration, base64ToBlob } from '@/utils/common'
 import _ from 'lodash';
 
+// Helper function to safely format dates
+const formatDate = (timestamp: any) => {
+  console.log('🚀 ~ formatDate ~ timestamp:', timestamp);
+  if (timestamp === null || timestamp === undefined) return 'No date';
+  
+  // Handle extra large timestamps (nanoseconds or microseconds)
+  let adjustedTimestamp = timestamp;
+  if (timestamp.toString().length > 13) {
+    // Convert nanoseconds (10^-9) or microseconds (10^-6) to milliseconds (10^-3)
+    adjustedTimestamp = Math.floor(timestamp / 1000000);
+  }
+  
+  const date = new Date(adjustedTimestamp);
+  
+  // Check if date is valid
+  if (isNaN(date.getTime())) {
+    return 'No date';
+  }
+  
+  // Format as yyyy-mm-dd, hr:mi:se
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}, ${hours}:${minutes}:${seconds}`;
+};
+
 export const VoiceListItem = ({
     item,
     index,
@@ -98,7 +128,7 @@ export const VoiceListItem = ({
     return (
       <div className={style.voiceItemWrapper}>
         <div className={style.gmt}>
-          {new Date(item.gmt_create).toLocaleString()}
+          {formatDate(item.gmt_create || item.created_at)}
         </div>
         <div className={style.voiceItem}>
           <div className={style.voiceImg} onClick={() => playAudio()}>

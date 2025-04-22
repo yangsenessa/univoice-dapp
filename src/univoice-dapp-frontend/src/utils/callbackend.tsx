@@ -93,7 +93,7 @@ interface BackendActor {
   use_invite_code: (code: string, newUserPrincipalId: string) => Promise<{ Ok: any } | { Err: string }>;
   get_friend_infos: (principalId: string) => Promise<Array<[any, bigint]>>;
   get_access_token: (principalId: string) => Promise<{ Ok: AccessTokenResponse } | { Err: string }>;
-  record_voice_file: (principal: Principal, folderId: number, fileId: number, metadataOpt: Array<Array<[string, MetadataValue]>>) => Promise<{ Ok: bigint } | { Err: string }>;
+  upload_voice_file: (principal: Principal, folder: string, filename: string, content: Uint8Array, metadataOpt?: Array<[string, string]>) => Promise<{ Ok: null } | { Err: string }>;
   mark_voice_file_deleted: (fileId: bigint) => Promise<{ Ok: null } | { Err: string }>;
   list_voice_files: (principalOpt: Principal[], folderIdOpt: number[], createdAfterOpt: bigint[], limitOpt: number[]) => Promise<{ Ok: VoiceOssInfo[] } | { Err: string }>;
   get_voice_file: (fileId: bigint) => Promise<Array<VoiceAssetData> | []>;
@@ -533,55 +533,59 @@ export async function get_access_token(
 }
 
 /**
- * Records a voice file in the backend
+ * Uploads a voice file to the backend
  * @param principalId - The principal ID of the user
- * @param folderId - The folder ID in the OSS where the file is stored
- * @param fileId - The file ID in the OSS
+ * @param folder - The folder path in the OSS where the file should be stored
+ * @param filename - The name of the file
+ * @param content - The binary content of the file
  * @param metadata - Optional metadata for the file
- * @returns A promise that resolves to either {Ok: nat64} with the record ID or {Err: string} on failure
+ * @returns A promise that resolves to either {Ok: null} on success or {Err: string} on failure
  * @throws Will throw an error if the backend call fails
  */
-export async function record_voice_file(
+export async function upload_voice_file(
     principalId: string | Principal,
-    folderId: number,
-    fileId: number,
-    metadata?: Array<[string, MetadataValue]>
-): Promise<{ Ok: bigint } | { Err: string }> {
+    folder: string,
+    filename: string,
+    content: Uint8Array,
+    metadata?: Array<[string, string]>
+): Promise<{ Ok: null; } | { Err: string; }> {
     try {
         // Convert principalId to Principal if it's a string
         const principalObj = typeof principalId === 'string' 
             ? Principal.fromText(principalId) 
             : principalId;
         
-        console.log(`Recording voice file: folder=${folderId}, file=${fileId} for principal: ${principalObj.toString()}`);
+        console.log(`Uploading voice file: ${filename} to folder ${folder} for principal: ${principalObj.toString()}`);
         const actor = await createActor();
         
-        // Format the metadata for the backend
-        const metadataOpt = metadata ? [metadata] : [];
-        
-        // Call the backend function
-        const result = await actor.record_voice_file(
+        // Call the backend function with the correct metadata format
+        const optMetadata = metadata && metadata.length > 0 ? 
+            [metadata as unknown as [string, string]] : 
+            []; // Empty array for no metadata
+            
+        const result = await actor.upload_voice_file(
             principalObj,
-            folderId,
-            fileId,
-            metadataOpt
-        ) as { Ok: bigint } | { Err: string };
+            folder,
+            filename,
+            content,
+            optMetadata as unknown as [string, string][]
+        ) as { Ok: null } | { Err: string };
         
         // Check if the result is valid
         if (result && typeof result === 'object') {
             if ('Ok' in result) {
-                console.log("Voice file recorded successfully:", result.Ok);
-                return { Ok: result.Ok as bigint };
+                console.log("Voice file uploaded successfully");
+                return { Ok: null };
             } else if ('Err' in result) {
-                console.error("Error recording voice file:", result.Err);
+                console.error("Error uploading voice file:", result.Err);
                 return { Err: result.Err as string };
             }
         }
         
-        throw new Error("Invalid response from record_voice_file");
+        throw new Error("Invalid response from upload_voice_file");
     } catch (error) {
-        console.error("Error in record_voice_file:", error);
-        return { Err: `Failed to record voice file: ${error.message}` };
+        console.error("Error in upload_voice_file:", error);
+        return { Err: `Failed to upload voice file: ${error.message}` };
     }
 }
 
@@ -651,7 +655,12 @@ export async function list_voice_files(
         const folderIdOpt = folderId !== undefined ? [folderId] : [];
         const createdAfterOpt = createdAfter !== undefined ? [createdAfter] : [];
         const limitOpt = limit !== undefined ? [limit] : [];
-        
+        console.log(`[OSS] Calling backend_list_voice_files with the specified parameters`,
+            principalObj.toString(),
+            folderIdOpt,
+            createdAfterOpt,
+            limitOpt
+        );
         // Call the backend function
         const result = await actor.list_voice_files(
             principalOpt,
@@ -660,18 +669,15 @@ export async function list_voice_files(
             limitOpt
         ) as { Ok: VoiceOssInfo[] } | { Err: string };
         
-        // Check if the result is valid
-        if (result && typeof result === 'object') {
-            if ('Ok' in result) {
-                const files = result.Ok as VoiceOssInfo[];
-                console.log(`Retrieved ${files.length} voice files`);
-                return { Ok: files };
-            } else if ('Err' in result) {
-                console.error("Error listing voice files:", result.Err);
-                return { Err: result.Err as string };
-            }
+        // Based on the backend definition, list_voice_files returns Vec<VoiceOssInfo> directly
+        // not a Result variant with Ok/Err
+        if (Array.isArray(result)) {
+            const files = result as VoiceOssInfo[];
+            console.log(`Retrieved ${files.length} voice files`);
+            return { Ok: files };
         }
         
+        console.error("Unexpected response format from list_voice_files:", result);
         throw new Error("Invalid response from list_voice_files");
     } catch (error) {
         console.error("Error in list_voice_files:", error);

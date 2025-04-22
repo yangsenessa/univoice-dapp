@@ -11,7 +11,8 @@
     "build": "tsc && vite build",
     "format": "prettier --write \"src/**/*.{json,js,jsx,ts,tsx,css,scss}\"",
     "generate-certs": "chmod +x ./generate-certificates.sh && ./generate-certificates.sh",
-    "start:https": "vite --port 5000"
+    "start:https": "vite --port 5000",
+    "serve": "node server/index.js"
   },
   "dependencies": {
     "@dfinity/agent": "^1.4.0",
@@ -26,7 +27,10 @@
     "react-media-recorder-2": "1.6.23",
     "react-router-dom": "^7.1.1",
     "simple-zustand-devtools": "^1.1.0",
-    "zustand": "^5.0.2"
+    "zustand": "^5.0.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "http-proxy-middleware": "^2.0.6"
   },
   "devDependencies": {
     "@babel/core": "^7.26.10",

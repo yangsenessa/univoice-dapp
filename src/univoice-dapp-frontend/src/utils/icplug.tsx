@@ -42,23 +42,78 @@ export const checkPlugReady = (): boolean => {
 }
 
 export const reConnectPlug = async (): Promise<string> => {
-  // try{
-  //   plug.disconnect()
-  // } catch (e) {
-  //   console.log('disconnect ic plug exception!', e);
-  // }
   try {
-    const publicKey = await plug.requestConnect({
-      whitelist,
-      // host,
-      timeout: 2 * 3600 * 1000
-    });
-    return plug.principalId ? plug.principalId : '';
-  } catch (e) {
-    console.log('connect ic plug exception!', e);
-    throw e;
+    // Check if Plug is available
+    const isAvailable = await window.ic?.plug?.isConnected();
+    
+    if (!isAvailable) {
+      // Define which canister(s) the agent should talk to
+      const whitelist = [
+        // Add your canister IDs here
+      ];
+      
+      // Check if running in development environment
+      const isDevelopment = 
+        window.location.hostname === 'localhost' || 
+        window.location.hostname.includes('.localhost') ||
+        (typeof import.meta !== 'undefined' && import.meta.env?.DEV);
+      
+      // Create agent options
+      const options = {
+        host: 'https://ic0.app',
+        whitelist,
+        onConnectionError: () => {
+          console.warn('Plug wallet connection error');
+        },
+        // Development-specific settings
+        ...(isDevelopment && {
+          // Add CORS settings with no-cors mode for all requests in development
+          fetchOptions: {
+            credentials: 'omit',
+            mode: 'no-cors',
+          },
+          customFetch: async (url: string, options: RequestInit = {}) => {
+            // For the problematic API endpoint
+            if (url.includes('/api/v2/status')) {
+              const fetchOptions = {
+                ...options,
+                mode: 'no-cors' as RequestMode,
+                headers: {
+                  ...options.headers,
+                  'Access-Control-Allow-Origin': '*',
+                }
+              };
+              console.log('Using custom fetch for status API');
+              return fetch(url, fetchOptions);
+            }
+            // For all other URLs, use regular fetch
+            return fetch(url, options);
+          },
+          // For local development, skip root key verification
+          ...(window.location.hostname.includes('localhost') && {
+            host: 'http://localhost:4943',
+            dev: true
+          })
+        })
+      };
+      
+      // Request connection to Plug
+      const connected = await window.ic?.plug?.requestConnect(options);
+      
+      if (!connected) {
+        console.error('Failed to connect to Plug wallet');
+        return '';
+      }
+    }
+    
+    // Get the principal ID
+    const principalId = await window.ic?.plug?.getPrincipal();
+    return principalId?.toString() || '';
+  } catch (error) {
+    console.error('Error connecting to Plug wallet:', error);
+    return '';
   }
-}
+};
 
 export const getTotalTransactions = async (): Promise<bigint> => {
   try {

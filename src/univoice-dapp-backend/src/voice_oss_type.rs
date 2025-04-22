@@ -17,7 +17,7 @@ thread_local! {
 
     static VOICE_ASSET_DATA: RefCell<StableVec<VoiceAssetData, VirtualMemory<DefaultMemoryImpl>>> = RefCell::new(
         StableVec::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0)))
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(4)))
         ).expect("Failed to initialize VOICE_ASSET_DATA")
     );
 }
@@ -61,7 +61,13 @@ impl Storable for VoiceAssetData {
     }
 
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        Decode!(bytes.as_ref(), Self).unwrap()
+        match Decode!(bytes.as_ref(), Self) {
+            Ok(data) => data,
+            Err(e) => {
+                ic_cdk::println!("Error decoding VoiceAssetData: {:?}", e);
+                Self::default() // Return a default instance on error
+            }
+        }
     }
 
     const BOUND: Bound = Bound::Bounded {

@@ -74,7 +74,7 @@ const RecordVoice = ({
           // Upload the voice recording to OSS
           const fileId = await voice_upload(
             file,
-            "voice-recordings", // folder path
+            "0", // folder path - root folder ID
             principalId,
             metadata
           );

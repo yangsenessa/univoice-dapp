@@ -10,6 +10,7 @@ export const UseScrollToBottom = (options = {}) => {
   
     const containerRef = useRef(null);
     const timeoutRef = useRef(null);
+    const targetRef = useRef(null);
   
     const checkBottom = useCallback(() => {
       let element, scrollTop, clientHeight, scrollHeight;
@@ -35,20 +36,24 @@ export const UseScrollToBottom = (options = {}) => {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(checkBottom, debounce);
     }, [checkBottom, debounce]);
-
-    let target;
-    let timer;
   
     useEffect(() => {
-      timer = setTimeout(() => {
-        target = useWindow ? window : containerRef.current;
-        if (!target) return;
-        target.addEventListener('scroll', handleScroll);
-        clearTimeout(timer)
-      }, 100);
+      const setupScrollListener = () => {
+        targetRef.current = useWindow ? window : containerRef.current;
+        if (!targetRef.current) return;
+        
+        targetRef.current.addEventListener('scroll', handleScroll);
+      };
+      
+      const timer = setTimeout(setupScrollListener, 100);
+      
       return () => {
-        target.removeEventListener('scroll', handleScroll);
+        clearTimeout(timer);
         clearTimeout(timeoutRef.current);
+        
+        if (targetRef.current) {
+          targetRef.current.removeEventListener('scroll', handleScroll);
+        }
       };
     }, [handleScroll, useWindow]);
   

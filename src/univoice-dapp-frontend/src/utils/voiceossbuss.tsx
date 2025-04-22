@@ -11,7 +11,7 @@ import { createAgent } from "@dfinity/utils";
 import { Ed25519KeyIdentity } from "@dfinity/identity";
 import {
   get_access_token,
-  record_voice_file as backend_record_voice_file,
+  upload_voice_file as backend_upload_voice_file,
   mark_voice_file_deleted as backend_mark_voice_file_deleted,
   list_voice_files as backend_list_voice_files,
   get_voice_file as backend_get_voice_file,
@@ -429,9 +429,9 @@ export async function voice_upload(
     
     // Record the voice file in the backend using the adapter function
     // Note: Still use the original user's principalId for backend record
-    console.log(`[OSS] Recording voice file in backend with params:
+    console.log(`[OSS] Uploading voice file to backend with params:
     - User Principal ID: ${principalId}
-    - Folder ID: ${folderId}
+    - Folder: ${folderPath}
     - File ID: ${uploadResult.id}
     - Metadata entries: ${formattedMetadata ? formattedMetadata.length : 0}`);
     
@@ -439,27 +439,65 @@ export async function voice_upload(
       // Create a Principal object from the string ID
       const principal = Principal.fromText(principalId);
       
-      const recordResult = await backend_record_voice_file(
+      // Convert file ID to filename that can be parsed as a number
+      const fileIdStr = String(uploadResult.id);
+      
+      // Get file content for upload
+      const fileContent = new Uint8Array(await file.arrayBuffer());
+      
+      // Convert metadata to the right format for upload_voice_file
+      const uploadMetadata = formattedMetadata ? 
+        formattedMetadata.map(([key, value]) => {
+          // Convert MetadataValue to string for upload_voice_file
+          let stringValue = "";
+          if ('Text' in value) {
+            stringValue = value.Text;
+          } else if ('Int' in value) {
+            stringValue = value.Int.toString();
+          } else if ('Nat' in value) {
+            stringValue = value.Nat.toString();
+          } else if ('Blob' in value) {
+            stringValue = Array.from(value.Blob)
+              .map(b => {
+                // Convert to number and then to hex
+                const n = Number(b);
+                const hex = n.toString(16);
+                return hex.length === 1 ? '0' + hex : hex;
+              })
+              .join('');
+          }
+          return [key, stringValue] as [string, string];
+        }) : 
+        undefined;
+      
+      type UploadResult = { Ok: null } | { Err: string };
+      
+      const backendUploadResult: UploadResult = await backend_upload_voice_file(
         principalId, // Use the user's principal ID for backend recording
-        folderId,
-        uploadResult.id,
-        formattedMetadata
+        folderPath,
+        fileIdStr, // Send just the numeric ID as a string
+        fileContent,
+        uploadMetadata
       );
       
       // Check result
-      if ('Ok' in recordResult) {
-        console.log(`[OSS] Voice file recorded successfully in backend:`, recordResult.Ok);
-        return uploadResult.id;
-      } else {
-        console.error(`[OSS] Error recording voice file in backend:`, recordResult.Err);
-        throw new Error(`Failed to record voice file: ${recordResult.Err}`);
+      if (backendUploadResult && typeof backendUploadResult === 'object') {
+        if ('Ok' in backendUploadResult) {
+          console.log(`[OSS] Voice file uploaded successfully to backend`);
+          return uploadResult.id;
+        } else if ('Err' in backendUploadResult) {
+          console.error(`[OSS] Error uploading voice file to backend:`, backendUploadResult.Err);
+          throw new Error(`Failed to upload voice file: ${backendUploadResult.Err}`);
+        }
       }
+      console.error(`[OSS] Unexpected response from upload_voice_file`);
+      throw new Error('Failed to upload voice file: Unexpected response format');
     } catch (recordError) {
-      console.error(`[OSS] Error during record_voice_file call:`, recordError);
+      console.error(`[OSS] Error during upload_voice_file call:`, recordError);
       
-      // Even if we couldn't record it in the backend, we did upload it to OSS
+      // Even if we couldn't upload it to the backend, we did upload it to OSS
       // Return the file ID so it's not completely lost
-      console.log(`[OSS] Returning file ID despite backend record failure: ${uploadResult.id}`);
+      console.log(`[OSS] Returning file ID despite backend upload failure: ${uploadResult.id}`);
       return uploadResult.id;
     }
   } catch (error) {
@@ -587,17 +625,111 @@ export async function fetch_voice_content(
     const chunks = await bucket.getFileChunks(fileId, 0);
     console.log(`[OSS] Retrieved ${chunks ? chunks.length : 0} file chunks`);
     
+    // Add detailed chunk structure logging
+    if (chunks && chunks.length > 0) {
+      console.log(`[OSS] First chunk structure:`, JSON.stringify(chunks[0]));
+      
+      // Check what properties are available on the chunk
+      const chunkKeys = Object.keys(chunks[0]);
+      console.log(`[OSS] Available properties on chunk:`, chunkKeys.join(', '));
+      
+      // If we receive a JSON object instead of a binary chunk, try to extract binary data
+      if (typeof chunks[0] === 'object' && !Array.isArray(chunks[0])) {
+        const chunkObj = chunks[0] as any;
+        // If this is a JSON representation of binary data with numeric indices as keys
+        if (Object.keys(chunkObj).every(key => !isNaN(Number(key)))) {
+          try {
+            // Convert the object structure to Uint8Array
+            const maxKey = Math.max(...Object.keys(chunkObj).map(Number));
+            const byteArray = new Uint8Array(maxKey + 1);
+            
+            for (const [key, value] of Object.entries(chunkObj)) {
+              byteArray[Number(key)] = Number(value);
+            }
+            
+            // Replace the chunk with the converted Uint8Array
+            chunks[0] = byteArray as any; // Cast to any to avoid type errors
+            console.log(`[OSS] Converted JSON object chunk to Uint8Array with length: ${byteArray.length}`);
+          } catch (e) {
+            console.error(`[OSS] Failed to convert JSON chunk to binary:`, e);
+          }
+        }
+      }
+    }
+    
     if (!chunks || chunks.length === 0) {
       console.error(`[OSS] No content found for voice file with ID ${fileId}`);
       throw new Error(`No content found for voice file with ID ${fileId}`);
     }
     
+    // Let's try to adapt to potential API differences or response format changes
+    // First try the expected "content" property
+    let contentProperty = 'content';
+    
+    // Check if any chunk has a "content" property
+    const hasContentProperty = chunks.some(chunk => !!(chunk && (chunk as any).content));
+    
+    // If not, try to find an alternative property that might contain the content
+    if (!hasContentProperty && chunks[0]) {
+      // Look for properties that might contain binary data
+      const potentialContentProps = Object.keys(chunks[0]).filter(key => {
+        const value = (chunks[0] as any)[key];
+        return value instanceof Uint8Array || 
+               (value && typeof value === 'object' && 'buffer' in value) ||
+               (value && typeof value === 'object' && 'byteLength' in value);
+      });
+      
+      if (potentialContentProps.length > 0) {
+        contentProperty = potentialContentProps[0];
+        console.log(`[OSS] Using "${contentProperty}" as the content property instead of "content"`);
+      }
+    }
+    
+    // Validate that at least one chunk has what we think is content data
+    const hasValidContent = chunks.some(chunk => !!(chunk && (chunk as any)[contentProperty]));
+    if (!hasValidContent) {
+      console.error(`[OSS] No valid content chunks found for voice file with ID ${fileId}. Cannot find "${contentProperty}" property.`);
+      
+      // Return a valid empty buffer that can be safely encoded as base64 later
+      console.warn(`[OSS] Returning minimal valid audio buffer as fallback for file ID: ${fileId}`);
+      
+      // Create a minimal valid WAV file header (44 bytes)
+      // This ensures that even with no content, we return something that can be encoded as base64
+      const emptyWav = new Uint8Array([
+        // RIFF header
+        0x52, 0x49, 0x46, 0x46, // "RIFF"
+        0x24, 0x00, 0x00, 0x00, // file size (36 + 0 = 36 bytes)
+        0x57, 0x41, 0x56, 0x45, // "WAVE"
+        
+        // fmt chunk
+        0x66, 0x6d, 0x74, 0x20, // "fmt "
+        0x10, 0x00, 0x00, 0x00, // chunk size (16 bytes)
+        0x01, 0x00,             // format = 1 (PCM)
+        0x01, 0x00,             // channels = 1 (mono)
+        0x44, 0xac, 0x00, 0x00, // sample rate = 44100
+        0x88, 0x58, 0x01, 0x00, // byte rate = 44100 * 1 * 1 = 44100
+        0x02, 0x00,             // block align = 1 * 1 = 2
+        0x10, 0x00,             // bits per sample = 16
+        
+        // data chunk
+        0x64, 0x61, 0x74, 0x61, // "data"
+        0x00, 0x00, 0x00, 0x00  // chunk size (0 bytes of sample data)
+      ]);
+      
+      return emptyWav.buffer;
+    }
+    
     // Calculate total size and create buffer
     let totalSize = 0;
     chunks.forEach((chunk) => {
-      // Access the content property using type assertion
-      const content = (chunk as any).content as Uint8Array;
-      totalSize += content.length;
+      // Access the content property using the determined property name
+      const content = (chunk as any)[contentProperty] as Uint8Array;
+      // Add null check before accessing length
+      if (content) {
+        totalSize += content.length;
+      } else {
+        console.warn(`[OSS] Found chunk without ${contentProperty} for file ID: ${fileId}`);
+      }
     });
     
     console.log(`[OSS] Creating buffer with total size: ${totalSize} bytes`);
@@ -606,11 +738,16 @@ export async function fetch_voice_content(
     // Concatenate all chunks
     let offset = 0;
     chunks.forEach((chunk, index) => {
-      // Access the content property using type assertion
-      const content = (chunk as any).content as Uint8Array;
-      console.log(`[OSS] Adding chunk ${index + 1} at offset: ${offset}`);
-      result.set(content, offset);
-      offset += content.length;
+      // Access the content property using the determined property name
+      const content = (chunk as any)[contentProperty] as Uint8Array;
+      // Add null check before trying to set content in result
+      if (content) {
+        console.log(`[OSS] Adding chunk ${index + 1} at offset: ${offset}`);
+        result.set(content, offset);
+        offset += content.length;
+      } else {
+        console.warn(`[OSS] Skipping chunk ${index + 1} with missing ${contentProperty}`);
+      }
     });
     
     console.log(`[OSS] Voice file content retrieved successfully, total size: ${totalSize} bytes`);
@@ -625,43 +762,173 @@ export async function fetch_voice_content(
  * Lists voice files for a user
  * @param principalId - The principal ID of the user
  * @param folderId - Optional folder ID to filter by
- * @param createdAfter - Optional timestamp to filter files created after
- * @param limit - Optional limit on the number of files to return
+ * @param page - Optional page number for pagination (1-based)
+ * @param pageSize - Optional limit on the number of files to return
  * @returns A promise that resolves to an array of voice file info objects
  * @throws Will throw an error if the listing fails
  */
 export async function list_voice_files(
-  principalId: string,
-  folderId?: number,
-  createdAfter?: bigint,
-  limit?: number
+  principalId?: string,
+  folderId?: string,
+  page?: number,
+  pageSize?: number
 ): Promise<VoiceOssInfo[]> {
   console.log(`[OSS] list_voice_files: Starting list operation with params:
-  - Principal ID: ${principalId}
+  - Principal ID: ${principalId !== undefined ? principalId : 'not specified'}
   - Folder ID: ${folderId !== undefined ? folderId : 'not specified'}
-  - Created after: ${createdAfter !== undefined ? createdAfter.toString() : 'not specified'}
-  - Limit: ${limit !== undefined ? limit : 'not specified'}`);
+  - Page: ${page !== undefined ? page : 'not specified'}
+  - Page Size: ${pageSize !== undefined ? pageSize : 'not specified'}`);
   
   try {
-    // Use the adapter function
+    // Convert principalId to Principal object if provided and not empty
+    const principalParam = principalId && principalId.trim() !== '' 
+      ? Principal.fromText(principalId)
+      : undefined;
+    
+    // Ensure pageSize is within a reasonable range
+    const pageSizeParam = pageSize !== undefined ? 
+      (pageSize > 50 ? 50 : (pageSize < 1 ? 10 : pageSize)) : 
+      undefined;
+    
+    // Ensure page is at least 1
+    const pageParam = page !== undefined && page > 0 ? page : 1;
+    
+    // Log the processed parameters
+    console.log(`[OSS] Processed parameters:
+    - Principal: ${principalParam ? principalParam.toString() : 'undefined'}
+    - Folder ID: ${folderId || 'undefined'}
+    - Page: ${pageParam}
+    - Page Size: ${pageSizeParam || 'undefined (default: 10)'}`);
+    
+    // Call the backend function - convert page to bigint if needed
     console.log(`[OSS] Calling backend_list_voice_files with the specified parameters`);
     const result = await backend_list_voice_files(
-      principalId,
-      folderId,
-      createdAfter,
-      limit
+      principalParam,
+      folderId as any, // Cast to any to bypass type check
+      BigInt(pageParam),
+      pageSizeParam
     );
     
-    if ('Ok' in result) {
-      console.log(`[OSS] Retrieved ${result.Ok.length} voice files successfully`);
-      return result.Ok;
-    } else {
-      console.error(`[OSS] Error listing voice files:`, result.Err);
-      return [];
+    // Handle the result which may be a variant with Ok/Err
+    if (result && typeof result === 'object') {
+      if ('Ok' in result) {
+        console.log(`[OSS] Retrieved ${result.Ok.length} voice files successfully (page ${pageParam})`);
+        return result.Ok;
+      } else if ('Err' in result) {
+        console.error(`[OSS] Error listing voice files:`, result.Err);
+        return [];
+      }
     }
+    
+    // If the result is not a variant (direct array), return it
+    // Need to check if result is array-like first to avoid type error
+    if (Array.isArray(result)) {
+      console.log(`[OSS] Retrieved ${result.length} voice files successfully (page ${pageParam})`);
+      return result as VoiceOssInfo[];
+    }
+    
+    // If we can't recognize the result format, return empty array
+    console.warn(`[OSS] Unrecognized result format:`, result);
+    return [];
   } catch (error) {
     console.error(`[OSS] Error in list_voice_files:`, error);
     throw error;
+  }
+}
+
+/**
+ * Fetches voice files and their content, converting to the format needed by the UI
+ * @param principalId - The principal ID of the user
+ * @param pageNum - The page number to fetch (1-based)
+ * @param pageSize - Number of items per page
+ * @returns A promise that resolves to an array of voice data items in the format expected by the UI
+ */
+export async function queryVoiceOnline(
+  principalId: string,
+  pageNum: number = 1,
+  pageSize: number = 10
+): Promise<any[]> {
+  console.log(`[OSS] queryVoiceOnline: Fetching page ${pageNum} with size ${pageSize} for principal: ${principalId}`);
+  
+  try {
+    // Get the list of voice files using the page-based pagination
+    const voiceFiles = await list_voice_files(principalId, '0', pageNum, pageSize);
+    console.log(`[OSS] Retrieved ${voiceFiles.length} voice files for page ${pageNum}`);
+    
+    // Process each voice file to get content and format for UI
+    const processedData = await Promise.all(voiceFiles.map(async (file) => {
+      try {
+        console.log(`[OSS] Processing file ID: ${file.file_id}`);
+        
+        // Fetch the voice content
+        const contentBuffer = await fetch_voice_content(Number(file.file_id), principalId);
+        
+        try {
+          // Convert ArrayBuffer to Base64 safely
+          const uint8Array = new Uint8Array(contentBuffer);
+          let base64Data = '';
+          
+          // Check if the data is actually already a string or JSON
+          if (uint8Array.length > 0) {
+            // Try to safely convert binary data to a string for base64 encoding
+            try {
+              base64Data = uint8Array.reduce((data, byte) => data + String.fromCharCode(byte), '');
+            } catch (e) {
+              console.error(`[OSS] Error converting Uint8Array to string:`, e);
+              base64Data = '';
+            }
+          }
+          
+          // Add data URL prefix for proper format expected by base64ToBlob
+          const contentBase64 = `data:audio/wav;base64,${btoa(base64Data)}`;
+          
+          // Get custom metadata (if any)
+          const customMetadata = file.custom || [];
+          const title = customMetadata.find(([key]) => key === 'title')?.[1]?.Text || '';
+          
+          // Format the data to match the expected schema in queryVoices
+          return {
+            prd_id: Number(file.file_id),
+            file_obj: contentBase64,
+            gmt_create: Number(file.created_at),
+            icon: '',
+            title: title,
+            timestamp: Number(file.created_at), // Keep timestamp for display purposes
+            file_id: Number(file.file_id) // Keep file_id for reference
+          };
+        } catch (e) {
+          console.error(`[OSS] Error processing content for file ID ${file.file_id}:`, e);
+          // Return a placeholder for failed files
+          return {
+            prd_id: Number(file.file_id),
+            file_obj: 'data:audio/wav;base64,', // Empty but valid base64 data URL
+            gmt_create: Number(file.created_at),
+            icon: '',
+            error: 'Failed to process content',
+            timestamp: Number(file.created_at),
+            file_id: Number(file.file_id)
+          };
+        }
+      } catch (error) {
+        console.error(`[OSS] Error processing file ID ${file.file_id}:`, error);
+        // Return a placeholder for failed files
+        return {
+          prd_id: Number(file.file_id),
+          file_obj: null, // Indicate failed content retrieval
+          gmt_create: Number(file.created_at),
+          icon: '',
+          error: 'Failed to load content',
+          timestamp: Number(file.created_at),
+          file_id: Number(file.file_id)
+        };
+      }
+    }));
+    
+    console.log(`[OSS] Successfully processed ${processedData.length} voice files for page ${pageNum}`);
+    return processedData;
+  } catch (error) {
+    console.error(`[OSS] Error in queryVoiceOnline:`, error);
+    return []; // Return empty array on error
   }
 }
 
