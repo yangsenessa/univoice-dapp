@@ -341,6 +341,74 @@ function createFileConfig(file: File, folderId: number): FileConfig {
 }
 
 /**
+ * Convert audio data to WAV format
+ * @param audioData - Original audio data
+ * @param sampleRate - Sample rate
+ * @param numChannels - Number of channels
+ * @returns Audio data in WAV format
+ */
+function convertToWav(audioData: Uint8Array, sampleRate: number = 44100, numChannels: number = 1): Uint8Array {
+  const bitsPerSample = 16;
+  const bytesPerSample = bitsPerSample / 8;
+  const blockAlign = numChannels * bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = audioData.length;
+  const headerSize = 44;
+  const totalSize = headerSize + dataSize;
+
+  const wavData = new Uint8Array(totalSize);
+  const view = new DataView(wavData.buffer);
+
+  // RIFF chunk descriptor
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, totalSize - 8, true);
+  writeString(view, 8, 'WAVE');
+
+  // fmt sub-chunk
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true); // fmt chunk size
+  view.setUint16(20, 1, true); // audio format (1 for PCM)
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+
+  // data sub-chunk
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  // Copy audio data
+  wavData.set(audioData, headerSize);
+
+  return wavData;
+}
+
+/**
+ * Write string to DataView
+ */
+function writeString(view: DataView, offset: number, string: string) {
+  for (let i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i));
+  }
+}
+
+/**
+ * Check if data is in WAV format
+ */
+function isWavFormat(data: Uint8Array): boolean {
+  return data.length >= 12 && 
+    data[0] === 0x52 && // R
+    data[1] === 0x49 && // I
+    data[2] === 0x46 && // F
+    data[3] === 0x46 && // F
+    data[8] === 0x57 && // W
+    data[9] === 0x41 && // A
+    data[10] === 0x56 && // V
+    data[11] === 0x45;   // E
+}
+
+/**
  * Uploads a voice file to the OSS bucket and records it in the backend
  * @param file - The file to upload
  * @param folderPath - The folder path in the OSS bucket
@@ -363,27 +431,71 @@ export async function voice_upload(
   - Has metadata: ${metadata ? 'yes' : 'no'}`);
   
   try {
-    // Get the access token from the backend using the FIXED principal ID
+    // Validate file type
+    if (!file.type.startsWith('audio/')) {
+      throw new Error('Invalid file type: Only audio files are allowed');
+    }
+
+    // Read file content
+    const fileContent = new Uint8Array(await file.arrayBuffer());
+    
+    // Check if file is in WAV format, convert if not
+    let wavContent: Uint8Array;
+    if (!isWavFormat(fileContent)) {
+      console.log(`[OSS] Converting audio file to WAV format`);
+      try {
+        // Create audio context
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        
+        // Decode audio data
+        const audioBuffer = await audioContext.decodeAudioData(fileContent.buffer);
+        
+        // Get audio data
+        const channelData = audioBuffer.getChannelData(0);
+        const pcmData = new Int16Array(channelData.length);
+        
+        // Convert to 16-bit PCM
+        for (let i = 0; i < channelData.length; i++) {
+          pcmData[i] = Math.max(-1, Math.min(1, channelData[i])) * 0x7FFF;
+        }
+        
+        // Convert to WAV format
+        wavContent = convertToWav(
+          new Uint8Array(pcmData.buffer),
+          audioBuffer.sampleRate,
+          audioBuffer.numberOfChannels
+        );
+        
+        console.log(`[OSS] Audio converted to WAV format successfully`);
+      } catch (conversionError) {
+        console.error(`[OSS] Error converting audio to WAV:`, conversionError);
+        throw new Error('Failed to convert audio to WAV format');
+      }
+    } else {
+      wavContent = fileContent;
+      console.log(`[OSS] File is already in WAV format`);
+    }
+
+    // Get access token
     console.log(`[OSS] Requesting access token for fixed principal: ${FIXED_PRINCIPAL_ID}`);
     const { access_token, folder } = await get_access_token(FIXED_PRINCIPAL_ID);
     console.log(`[OSS] Received access token (length: ${access_token.length}) and folder: ${folder}`);
     
-    // Initialize OSS with the access token
+    // Initialize OSS
     console.log(`[OSS] Initializing OSS with token and using fixed identity`);
     const [bucket, uploader] = await initOssWithToken(access_token);
     console.log(`[OSS] OSS initialized successfully`);
     
-    // Get bucket info to verify connection
+    // Get bucket info
     const bucketInfo = await bucket.getBucketInfo();
     console.log(`[OSS] Bucket info retrieved:`, bucketInfo);
     
-    // Get or create folder info
-    let folderId = 0; // Root folder
+    // Get or create folder
+    let folderId = 0;
     console.log(`[OSS] Initial folder ID set to root (0)`);
     
     if (folderPath) {
       console.log(`[OSS] Folder path provided: ${folderPath}, checking if it exists`);
-      // List folders to check if it exists
       const folders = await bucket.listFolders(0);
       console.log(`[OSS] Found ${folders.length} folder(s) in root: ${folders.map(f => f.name).join(', ')}`);
       
@@ -392,22 +504,27 @@ export async function voice_upload(
         folderId = existingFolder.id;
         console.log(`[OSS] Found existing folder: ${folderPath} with ID: ${folderId}`);
       } else {
-        // Create folder if it doesn't exist
         console.log(`[OSS] Creating folder: ${folderPath} with parent ID: 0`);
         const folderInfo = await bucket.createFolder({
           name: folderPath,
-          parent: 0 // Root folder
+          parent: 0
         });
         folderId = folderInfo.id;
         console.log(`[OSS] Created folder: ${folderPath} with ID: ${folderId}`);
       }
     }
     
-    // Prepare file config for upload
+    // Prepare file config
     console.log(`[OSS] Creating file config for upload`);
-    const fileConfig = createFileConfig(file, folderId);
+    const fileConfig = {
+      name: file.name.replace(/\.[^/.]+$/, '.wav'), // Ensure file extension is .wav
+      contentType: 'audio/wav',
+      size: wavContent.length,
+      parent: folderId,
+      content: new Blob([wavContent], { type: 'audio/wav' })
+    };
     
-    // Upload the file to OSS
+    // Upload file to OSS
     console.log(`[OSS] Starting file upload to bucket with folder ID: ${folderId}`);
     const uploadResult = await uploader.upload(fileConfig, (progress) => {
       console.log(`[OSS] Upload progress: ${progress.filled}/${progress.size} bytes (${Math.round((progress.filled / progress.size) * 100)}%)`);
@@ -415,11 +532,11 @@ export async function voice_upload(
     
     console.log(`[OSS] File uploaded successfully, ID: ${uploadResult.id}, getting file info to confirm upload`);
     
-    // Get file info to confirm upload
+    // Get file info
     const fileInfo = await bucket.getFileInfo(uploadResult.id);
     console.log(`[OSS] File info retrieved:`, fileInfo);
     
-    // Format metadata for the backend if provided
+    // Format metadata
     let formattedMetadata;
     if (metadata) {
       console.log(`[OSS] Formatting metadata for backend`);
@@ -427,8 +544,7 @@ export async function voice_upload(
       console.log(`[OSS] Metadata formatted with ${formattedMetadata.length} entries`);
     }
     
-    // Record the voice file in the backend using the adapter function
-    // Note: Still use the original user's principalId for backend record
+    // Record in backend
     console.log(`[OSS] Uploading voice file to backend with params:
     - User Principal ID: ${principalId}
     - Folder: ${folderPath}
@@ -436,19 +552,12 @@ export async function voice_upload(
     - Metadata entries: ${formattedMetadata ? formattedMetadata.length : 0}`);
     
     try {
-      // Create a Principal object from the string ID
       const principal = Principal.fromText(principalId);
-      
-      // Convert file ID to filename that can be parsed as a number
       const fileIdStr = String(uploadResult.id);
       
-      // Get file content for upload
-      const fileContent = new Uint8Array(await file.arrayBuffer());
-      
-      // Convert metadata to the right format for upload_voice_file
+      // Convert metadata
       const uploadMetadata = formattedMetadata ? 
         formattedMetadata.map(([key, value]) => {
-          // Convert MetadataValue to string for upload_voice_file
           let stringValue = "";
           if ('Text' in value) {
             stringValue = value.Text;
@@ -459,7 +568,6 @@ export async function voice_upload(
           } else if ('Blob' in value) {
             stringValue = Array.from(value.Blob)
               .map(b => {
-                // Convert to number and then to hex
                 const n = Number(b);
                 const hex = n.toString(16);
                 return hex.length === 1 ? '0' + hex : hex;
@@ -470,17 +578,14 @@ export async function voice_upload(
         }) : 
         undefined;
       
-      type UploadResult = { Ok: null } | { Err: string };
-      
-      const backendUploadResult: UploadResult = await backend_upload_voice_file(
-        principalId, // Use the user's principal ID for backend recording
+      const backendUploadResult = await backend_upload_voice_file(
+        principalId,
         folderPath,
-        fileIdStr, // Send just the numeric ID as a string
-        fileContent,
+        fileIdStr,
+        wavContent,
         uploadMetadata
       );
       
-      // Check result
       if (backendUploadResult && typeof backendUploadResult === 'object') {
         if ('Ok' in backendUploadResult) {
           console.log(`[OSS] Voice file uploaded successfully to backend`);
@@ -490,13 +595,11 @@ export async function voice_upload(
           throw new Error(`Failed to upload voice file: ${backendUploadResult.Err}`);
         }
       }
+      
       console.error(`[OSS] Unexpected response from upload_voice_file`);
       throw new Error('Failed to upload voice file: Unexpected response format');
     } catch (recordError) {
       console.error(`[OSS] Error during upload_voice_file call:`, recordError);
-      
-      // Even if we couldn't upload it to the backend, we did upload it to OSS
-      // Return the file ID so it's not completely lost
       console.log(`[OSS] Returning file ID despite backend upload failure: ${uploadResult.id}`);
       return uploadResult.id;
     }
@@ -541,13 +644,20 @@ export async function voice_delete(
     if (deleteResult) {
       // Mark the file as deleted in the backend using the adapter function
       console.log(`[OSS] Marking file with ID: ${fileId} as deleted in backend`);
-      const markResult = await backend_mark_voice_file_deleted(fileId);
-      
-      if ('Ok' in markResult) {
-        console.log(`[OSS] Voice file marked as deleted successfully`);
-        return true;
-      } else {
-        console.error(`[OSS] Error marking voice file as deleted:`, markResult.Err);
+      try {
+        // Create actor and call delete_voice_file directly
+        const actor = await createActor();
+        const markResult = await actor.delete_voice_file(String(fileId));
+        
+        if ('Ok' in markResult) {
+          console.log(`[OSS] Voice file marked as deleted successfully`);
+          return true;
+        } else {
+          console.error(`[OSS] Error marking voice file as deleted:`, markResult.Err);
+          return false;
+        }
+      } catch (markError) {
+        console.error(`[OSS] Error calling delete_voice_file:`, markError);
         return false;
       }
     } else {

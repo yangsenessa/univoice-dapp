@@ -76,7 +76,7 @@ console.log("Callbackend Environment:", development ? "Local" : "Production");
 console.log("Host being used:", development ? LOCAL_HOST : IC_HOST);
 
 // Backend canister IDs - use different IDs for local vs production
-const PROD_BACKEND_CANISTER_ID = "224pv-saaaa-aaaaj-af7qa-cai";
+const PROD_BACKEND_CANISTER_ID = "gwg2k-eiaaa-aaaai-ath2q-cai";
 const LOCAL_BACKEND_CANISTER_ID = "224pv-saaaa-aaaaj-af7qa-cai"; // Use your local canister ID
 const BACKEND_CANISTER_ID = development ? LOCAL_BACKEND_CANISTER_ID : PROD_BACKEND_CANISTER_ID;
 
@@ -94,7 +94,7 @@ interface BackendActor {
   get_friend_infos: (principalId: string) => Promise<Array<[any, bigint]>>;
   get_access_token: (principalId: string) => Promise<{ Ok: AccessTokenResponse } | { Err: string }>;
   upload_voice_file: (principal: Principal, folder: string, filename: string, content: Uint8Array, metadataOpt?: Array<[string, string]>) => Promise<{ Ok: null } | { Err: string }>;
-  mark_voice_file_deleted: (fileId: bigint) => Promise<{ Ok: null } | { Err: string }>;
+  delete_voice_file: (fileId: string) => Promise<{ Ok: null } | { Err: string }>;
   list_voice_files: (principalOpt: Principal[], folderIdOpt: number[], createdAfterOpt: bigint[], limitOpt: number[]) => Promise<{ Ok: VoiceOssInfo[] } | { Err: string }>;
   get_voice_file: (fileId: bigint) => Promise<Array<VoiceAssetData> | []>;
   get_cluster_canister: () => Promise<string[]>;
@@ -150,18 +150,33 @@ export async function get_user_tasks(principalId: string): Promise<TaskData[] | 
     try {
         console.log("Fetching tasks for principal:", principalId);
         const actor = await createActor();
-        const result = await actor.get_user_tasks(principalId) as { tasks: Array<TaskData> } | { Err: string };
+        const result = await actor.get_user_tasks(principalId);
 
-        if ('tasks' in result) {
-            console.log("Tasks retrieved:", result.tasks);
-            return result.tasks;
-        } else if ('Err' in result) {
-            console.error("Error from backend:", result.Err);
-            return null;
-        } else {
-            console.error("Unexpected response format:", result);
-            return null;
+        // 检查结果是否为数组
+        if (Array.isArray(result)) {
+            // 如果结果是一个二维数组，取第一个元素
+            const tasks = Array.isArray(result[0]) ? result[0] : result;
+            
+            if (tasks.length === 0) {
+                console.log("No tasks found");
+                return null;
+            }
+            
+            console.log("Tasks retrieved:", tasks);
+            return tasks;
+        } else if (result && typeof result === 'object') {
+            // 处理可能的对象格式响应
+            if ('tasks' in result) {
+                console.log("Tasks retrieved:", result.tasks);
+                return result.tasks;
+            } else if ('Err' in result) {
+                console.error("Error from backend:", result.Err);
+                return null;
+            }
         }
+        
+        console.error("Unexpected response format:", result);
+        return null;
     } catch (error) {
         console.error("Error fetching tasks:", error);
         return null;
@@ -602,11 +617,11 @@ export async function mark_voice_file_deleted(
         console.log(`Marking voice file as deleted: ${fileId}`);
         const actor = await createActor();
         
-        // Ensure fileId is a bigint
-        const bigintFileId = typeof fileId === 'number' ? BigInt(fileId) : fileId;
+        // Convert fileId to string as required by the backend
+        const stringFileId = String(fileId);
         
         // Call the backend function
-        const result = await actor.mark_voice_file_deleted(bigintFileId) as { Ok: null } | { Err: string };
+        const result = await actor.delete_voice_file(stringFileId);
         
         // Check if the result is valid
         if (result && typeof result === 'object') {
@@ -619,7 +634,7 @@ export async function mark_voice_file_deleted(
             }
         }
         
-        throw new Error("Invalid response from mark_voice_file_deleted");
+        throw new Error("Invalid response from delete_voice_file");
     } catch (error) {
         console.error("Error in mark_voice_file_deleted:", error);
         return { Err: `Failed to mark voice file as deleted: ${error.message}` };

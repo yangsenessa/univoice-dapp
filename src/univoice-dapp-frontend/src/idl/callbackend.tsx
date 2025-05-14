@@ -13,7 +13,7 @@ const LOCAL_HOST = "http://localhost:4943";
 const IC_HOST = "https://ic0.app";
 
 // Backend canister IDs - use different IDs for local vs production
-const PROD_BACKEND_CANISTER_ID = "224pv-saaaa-aaaaj-af7qa-cai";
+const PROD_BACKEND_CANISTER_ID = "gwg2k-eiaaa-aaaai-ath2q-cai";
 const LOCAL_BACKEND_CANISTER_ID = "224pv-saaaa-aaaaj-af7qa-cai"; // Use your local canister ID
 const BACKEND_CANISTER_ID = isLocalNet() ? LOCAL_BACKEND_CANISTER_ID : PROD_BACKEND_CANISTER_ID;
 
