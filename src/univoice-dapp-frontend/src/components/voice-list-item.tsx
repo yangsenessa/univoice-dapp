@@ -4,6 +4,13 @@ import voicePng from '@/assets/imgs/voice.png';
 import { getAudioDuration, base64ToBlob } from '@/utils/common'
 import _ from 'lodash';
 
+interface VoiceItem {
+  file_obj: string;
+  icon?: string;
+  gmt_create?: number;
+  created_at?: number;
+}
+
 // Helper function to safely format dates
 const formatDate = (timestamp: any) => {
   console.log('🚀 ~ formatDate ~ timestamp:', timestamp);
@@ -39,80 +46,59 @@ export const VoiceListItem = ({
     index,
     onDelete,
   }: {
-    item: any;
+    item: VoiceItem;
     index: number;
-    onDelete: (item: any, index: number) => void;
+    onDelete: (item: VoiceItem, index: number) => void;
   }) => {
-    const audioRef = useRef<any>();
-    // 播放，暂停
+    const audioRef = useRef<HTMLAudioElement | null>(null);
     const [playing, setPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
 
     useEffect(() => {
-      if (!item && !item.file_obj) return;
+      if (!item?.file_obj) return;
   
-      // var urlstr = item.file_obj;
-      // var re = /http/gi;
-      // var newstr = urlstr.replace(re, "https");
-      // console.log('File url:', newstr)
-
       const blob = base64ToBlob(item.file_obj);
       const url = URL.createObjectURL(blob);
-      audioRef.current = new Audio(url);
-      // audioRef.current = new Audio(item.file_obj);
-      audioRef.current.preload = "metadata";
-      audioRef.current.autoplay = false; //true;
-      audioRef.current.type = "audio/wav"
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.preload = "metadata";
+      audio.autoplay = false;
   
-      if (audioRef.current == null) {
-        // console.error('Audio ref error!');
-      }
-  
-      audioRef.current.onloadeddata = () => {
-        // console.log('onloadeddata done!!!')
-      }
-  
-      audioRef.current.onload = () => {
-        // console.log('onload done!!!')
-      }
-  
-      audioRef.current.onloadstart = () => {
-        // console.log('onloadstart done!!!')
-      }
-  
-      audioRef.current.onloadedmetadata = () => {
-        // console.log('onloadedmetadata exec!!!')
-        const time = audioRef.current.duration;
-  
-        // console.log('onloadedmetadata time', time);
+      audio.onloadedmetadata = () => {
+        const time = audio.duration;
         time && time !== Infinity && setDuration(time);
       };
   
-      audioRef.current.onloadeddata = () => {
-        // console.log('onloadeddata exec!!!')
-        const time = audioRef.current.duration;
-  
-        // console.log('onloadeddata time', time);
+      audio.onloadeddata = () => {
+        const time = audio.duration;
         time && time !== Infinity && setDuration(time);
       }
 
-      // work in base64
       getAudioDuration(item.file_obj).then(time => {
         time && time !== Infinity && setDuration(time);
       });
   
       return () => {
-        audioRef.current = null;
+        if (audio) {
+          audio.pause();
+          audioRef.current = null;
+        }
+        URL.revokeObjectURL(url);
         setPlaying(false);
       };
-    }, [item]);
-  
+    }, [item.file_obj]);
+
     const playAudio = () => {
-      audioRef.current.load()
       const audio = audioRef.current;
-  
-      playing ? audio.pause() : audio.play();
+      if (!audio) return;
+
+      audio.load();
+      if (playing) {
+        audio.pause();
+      } else {
+        audio.play();
+      }
       setPlaying(!playing);
   
       audio.ontimeupdate = () => {
@@ -120,7 +106,7 @@ export const VoiceListItem = ({
       };
   
       audio.onended = () => {
-        setCurrentTime(duration) // show full
+        setCurrentTime(duration);
         setPlaying(false);
       };
     };

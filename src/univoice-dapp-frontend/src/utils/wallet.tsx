@@ -1,4 +1,3 @@
-import { useAcountStore } from '@/stores/user'
 import { getPlugPrincipal, buildActor as buildActorPlug } from '@/utils/icplug'
 // import { getPrincipal as getIIPrincipal, buildActor as buildActorII } from '@/utils/icii'
 import { WALLET_TYPE, TransferResponse, ERROR_MSG } from '@/utils/uv_const'
@@ -10,6 +9,8 @@ import { icrc7IdlFactory } from '@/idl/icrc7.did.js';
 const tokenCanisterId  = 'jfqe5-daaaa-aaaai-aqwvq-cai';
 // Nft canister ids
 const nftCanisterId = "3blo3-qqaaa-aaaam-ad3ea-cai";
+
+import { useAcountStore } from '@/stores/user'
 
 const buildActor = async (idl, canisterId) => {
   const walletType = useAcountStore.getState().getWalletType()

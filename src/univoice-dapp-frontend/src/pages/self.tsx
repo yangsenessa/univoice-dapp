@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { fmtInt, fmtUvBalance, fmtTimestamp, fmtSummaryAddr } from '@/utils';
 import { call_tokens_of, getWalletPrincipal, queryBalance as queryWalletBalance, transfer } from '@/utils/wallet'
 import style from './self.module.scss'
@@ -10,19 +10,23 @@ import Modal from '@/components/modal-dialog'
 import { showLoading, hideLoading } from '@/components/loading'
 
 // import {fetch_sumary_for_myvoice, claim_to_account_by_principal, get_miner_jnl} from "@/utils/call_dapp_backend";
-import { useAcountStore } from '@/stores/user';
 import { calculate_total_claimable_rewards, get_unclaimed_rewards } from '@/utils/callbackend';
+
 function SelfPage() {
   const navigate = useNavigate();
-
   const [summaryData, setSummaryData] = useState({
     rewards: '',
     claimable: '',
   });
   const [licenseData, setLicenseData] = useState<any>([]);
   const [claimable, setClaimable] = useState(true)
-  const { getPrincipal } = useAcountStore();
   const [walletBalance, setWalletBalance] = useState('')
+  const [useAcountStore, setUseAcountStore] = useState<any>(null);
+  const [mSendOpen, setMSendOpen] = useState(false)
+  const [mReceiveOpen, setMReceiveOpen] = useState(false)
+  const [sendTargetPId, setSendTargetPId] = useState('')
+  const [sendAmount, setSendAmount] = useState('')
+  const [mSendConfirmOpen, setMSendConfirmOpen] = useState(false)
 
   const handleBack = () => {
     window.history.back();
@@ -33,7 +37,7 @@ function SelfPage() {
   };
 
   const refreshBalance = () => {
-    if (getPrincipal() === '') {
+    if (!useAcountStore || useAcountStore.getState().getPrincipal() === '') {
       return
     }
     queryWalletBalance().then((balance) => {
@@ -47,11 +51,18 @@ function SelfPage() {
   }
 
   const getPrincipalStr = (len1: number, len2: number) => {
-    const pid = getPrincipal()
+    if (!useAcountStore) return '';
+    const pid = useAcountStore.getState().getPrincipal()
     return pid.substring(0, len1) + '...' + pid.substring(pid.length - len2);
   }
 
   useEffect(() => {
+    import('@/stores/user').then(mod => setUseAcountStore(() => mod.useAcountStore));
+  }, []);
+
+  // Guard: Only use useAcountStore after it is loaded
+  useEffect(() => {
+    if (!useAcountStore) return;
     window.scrollTo(0, 0);
     getWalletPrincipal().then(pid => {
       if(pid){
@@ -62,8 +73,13 @@ function SelfPage() {
     }).catch(e => {
       toastError('Failed to load page data: ' + e.toString())
     });
-  }, [getPrincipal()]);
-  
+  }, [useAcountStore]);
+
+  if (!useAcountStore) return null;
+
+  // Guarded getPrincipal
+  const getPrincipal = useAcountStore ? useAcountStore.getState().getPrincipal : () => '';
+
   const loadSummary = async () => {
     let data={
       rewards: '',
@@ -152,14 +168,13 @@ function SelfPage() {
       return
     }
     // TODO
-    // claim_to_account_by_principal(getPrincipal()).then(trans_tokens=>{
+    // claim_to_account_by_principal(useAcountStore.getPrincipal()).then(trans_tokens=>{
     //   toastSuccess("You have claimed "+String(trans_tokens)+" success. You can recheck by your wallet.");
     //   loadSummary();
     //   setClaimable(false)
     // });
   }
 
-  const [mSendOpen, setMSendOpen] = useState(false)
   const onCloseMSend = () => {
     setMSendOpen(false)
   }
@@ -169,7 +184,6 @@ function SelfPage() {
     setMSendOpen(true)
   }
 
-  const [mReceiveOpen, setMReceiveOpen] = useState(false)
   const onCloseMReceive = () => {
     setMReceiveOpen(false)
   }
@@ -180,14 +194,6 @@ function SelfPage() {
   const handleClickCopyPrincipal = () => {
     navigator.clipboard.writeText(getPrincipal())
   }
-
-  const [sendTargetPId, setSendTargetPId] = useState('')
-  const [sendAmount, setSendAmount] = useState('')
-
-  // const handleInputSendTarget = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   if (e.target.value.length > 6) return;
-  //   setSendTargetPId(e.target.value);
-  // };
 
   const handelInputSendAmout = (val: string) => {
     if (val.length == 0) {
@@ -217,14 +223,6 @@ function SelfPage() {
       return;
     }
     openMSendConfirm();
-  }
-
-  const [mSendConfirmOpen, setMSendConfirmOpen] = useState(false)
-  const onCloseMSendConfirm = () => {
-    setMSendConfirmOpen(false)
-  }
-  const openMSendConfirm = () => {
-    setMSendConfirmOpen(true)
   }
 
   const handleConfirmSend = async () => {
@@ -260,6 +258,13 @@ function SelfPage() {
         console.error('Error send $uvc:', error);
         toastError(`Transfer failed: ${error}`);
       });
+  }
+
+  const openMSendConfirm = () => {
+    setMSendConfirmOpen(true)
+  }
+  const onCloseMSendConfirm = () => {
+    setMSendConfirmOpen(false)
   }
   
   return (

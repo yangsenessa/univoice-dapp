@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import style from './record-voice.module.scss'
 import Timer from '@/components/timer'
 import { useReactMediaRecorder } from "react-media-recorder-2";
@@ -11,38 +11,11 @@ const RecordVoice = ({
   onClose
 }) => {
     const [isPressing, setPressing] = useState(false);
-    let timer = null;
+    const timerRef = useRef(null);
     const [recordTimer, setRecordTimer] = useState(0)
     const [isRecording, setIsRecording] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
-
-    const handleMouseDown = () => {
-      timer = setTimeout(() => {
-        setPressing(true);
-        startRecord();
-      }, 600);
-    };
-    
-    const handleMouseUp = () => {
-      clearTimeout(timer);
-      if (isPressing) {
-        setPressing(false);
-        stopRecord();
-      }
-    };
-
-    const startRecord = () => {
-      console.log('start record')
-      startRecording()
-      setRecordTimer(new Date().getTime())
-      setIsRecording(true)
-    }
-    const stopRecord = () => {
-      console.log('end record')
-      stopRecording()
-      setRecordTimer(0)
-      setIsRecording(false)
-    }
+    const { getPrincipal } = useAcountStore();
 
     const doUploadVoice = async (mediaBlobUrl: string, blob: Blob) => {
       try {
@@ -52,17 +25,12 @@ const RecordVoice = ({
         if(blob != null || blob != undefined) {
           console.log("Blob voice is not null", blob);
           
-          // Create a File object from the Blob
           const now = new Date();
           const fileName = `voice_${now.getTime()}.wav`;
           const file = new File([blob], fileName, { type: 'audio/wav' });
           
-          // Get the current user's principal ID
-          // Note: In a real app, you'd get this from your auth context
-          // This is just a placeholder - replace with your actual auth logic
-          const principalId = useAcountStore.getState().getPrincipal();
+          const principalId = getPrincipal();
           
-          // Add metadata for the voice recording
           const duration = Math.round((now.getTime() - recordTimer) / 1000);
           const metadata = {
             title: fileName,
@@ -71,24 +39,21 @@ const RecordVoice = ({
             tags: ["voice", "recording"]
           };
           
-          // Upload the voice recording to OSS
           const fileId = await voice_upload(
             file,
-            "0", // folder path - root folder ID
+            "0",
             principalId,
             metadata
           );
           
           console.log("Voice uploaded successfully with ID:", fileId);
           
-          // If you have an onClose callback that expects the file ID
           if (onClose) {
             onClose(fileId);
           }
         }
       } catch (error) {
         console.error("Error uploading voice:", error);
-        // Handle upload error - you might want to show a notification
       } finally {
         setIsUploading(false);
       }
@@ -107,13 +72,51 @@ const RecordVoice = ({
       onStop: doUploadVoice
     });
 
+    const handleMouseDown = () => {
+      timerRef.current = setTimeout(() => {
+        setPressing(true);
+        startRecord();
+      }, 600);
+    };
+    
+    const handleMouseUp = () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+      if (isPressing) {
+        setPressing(false);
+        stopRecord();
+      }
+    };
+
+    const startRecord = () => {
+      console.log('start record')
+      startRecording()
+      setRecordTimer(new Date().getTime())
+      setIsRecording(true)
+    }
+
+    const stopRecord = () => {
+      console.log('end record')
+      stopRecording()
+      setRecordTimer(0)
+      setIsRecording(false)
+    }
+
+    useEffect(() => {
+      return () => {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+        }
+      };
+    }, []);
+
   return (
     <div className={style.recordPanel}>
       <div className={style.timer}>
         <Timer start={recordTimer} />
       </div>
       <div className={style.btnAnimate}>
-        {/* Simple CSS-based recording animation that doesn't require external WASM */}
         <div className={`${style.recordingAnimation} ${isRecording ? style.active : ''}`}>
           <div className={style.circle}></div>
           <div className={style.circle}></div>

@@ -1,16 +1,27 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import style from './home.module.scss'
 import WalletLogin from '@/components/wallet-login'
 import InviteCode from '@/components/invite-code'
 import RecordVoice from '@/components/record-voice'
-import { useAcountStore } from '@/stores/user';
 import mainImg from '@/assets/imgs/home.gif'
 import { useNavigate } from 'react-router-dom';
 import Modal from '@/components/modal-dialog'
 
 function HomePage() {
   const navigate = useNavigate();
-  const { getPrincipal, getExInfo } = useAcountStore();
+  const [useAcountStore, setUseAcountStore] = useState<any>(null);
+  const [mInviteCodeOpen, setMInviteCodeOpen] = useState(false)
+  const [mLoginOpen, setMLoginOpen] = useState(false)
+  const [mRecordOpen, setMRecordOpen] = useState(false)
+
+  useEffect(() => {
+    import('@/stores/user').then(mod => setUseAcountStore(() => mod.useAcountStore));
+  }, []);
+
+  if (!useAcountStore) return null;
+
+  const getPrincipal = useAcountStore.getState().getPrincipal;
+  const getExInfo = useAcountStore.getState().getExInfo;
 
   const getPrincipalStr = (len1: number, len2: number) => {
     const pid = getPrincipal()
@@ -21,7 +32,6 @@ function HomePage() {
     navigate('/self');
   }
 
-  const [mInviteCodeOpen, setMInviteCodeOpen] = useState(false)
   const onCloseMInviteCode = () => {
     setMInviteCodeOpen(false)
   }
@@ -29,7 +39,6 @@ function HomePage() {
     setMInviteCodeOpen(true)
   }
 
-  const [mLoginOpen, setMLoginOpen] = useState(false)
   const onCloseMLogin = () => {
     setMLoginOpen(false)
   }
@@ -37,7 +46,6 @@ function HomePage() {
     setMLoginOpen(true)
   }
 
-  const [mRecordOpen, setMRecordOpen] = useState(false)
   const onCloseMRecord = () => {
     setMRecordOpen(false)
   }

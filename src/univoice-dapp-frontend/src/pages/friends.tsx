@@ -1,31 +1,25 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import style from './friends.module.scss'
 import { useNavigate } from 'react-router-dom';
-import { useAcountStore } from '@/stores/user';
 import { fmtInt } from '@/utils/index';
 import Modal from '@/components/modal-dialog'
 import Default_Avatar from '@/assets/imgs/user_avatar.png'
-// Remove the top-level await import
 import { WALLET_TYPE } from '@/utils/uv_const'
-import { get_friend_infos } from '@/utils/callbackend'; // Add this import
-
+import { get_friend_infos } from '@/utils/callbackend';
+import { useAcountStore } from '@/stores/user'
 
 function FriendsPage() {
   const navigate = useNavigate();
+  const { getPrincipal, setUserByWallet } = useAcountStore();
   
-  const { getPrincipal } = useAcountStore();
+  const [isLoading, setIsLoading] = useState(true);
   const [list, setList] = useState<any[]>([]);
   const [inviteCode, setInviteCode] = useState('');
-
-  useEffect(() => {
-    initData();
-  }, []);
+  const [mCodeOpen, setMCodeOpen] = useState(false);
 
   const getInviteCode = async () => {
     try {
-      // Dynamically import the module inside the function
       const { get_custom_info } = await import('@/utils/callbackend');
-      // Check if principal is available, if not try to reconnect
       const principal = getPrincipal();
       if (!principal) {
         console.log('Principal not found, attempting to reconnect wallet');
@@ -37,9 +31,6 @@ function FriendsPage() {
               console.error('Failed to reconnect to wallet');
               return '';
             }
-            // Update user with reconnected wallet
-            const { useAcountStore } = await import('@/stores/user');
-            const { setUserByWallet } = useAcountStore.getState();
             setUserByWallet(WALLET_TYPE.PLUG, principal_id);
             const { add_custom_info } = await import('@/utils/callbackend');
             const customInfo = {
@@ -72,7 +63,7 @@ function FriendsPage() {
           return '';
         }
       }
-      const result = await get_custom_info(null,getPrincipal());
+      const result = await get_custom_info(null, getPrincipal());
       
       if (result && result.invite_code) {
         setInviteCode(result.invite_code);
@@ -81,7 +72,7 @@ function FriendsPage() {
         console.error('Error getting invite code:', result.err);
         return '';
       } else {
-        console.warn('Invalid response format for invite code',result);
+        console.warn('Invalid response format for invite code', result);
         return '';
       }
     } catch (error) {
@@ -102,44 +93,43 @@ function FriendsPage() {
       setList(result.friends);
     } catch (error) {
       console.error('Failed to fetch friend data:', error);
-      // Fallback to sample data in case of error
-      const fallbackData = {
-        friends: [
-        ]
-      };
-      setList(fallbackData.friends);
+      setList([]);
     }
     
-    // Call the function directly since it's now properly defined as async
     getInviteCode();
   }
+
+  useEffect(() => {
+    const initialize = async () => {
+      await initData();
+      setIsLoading(false);
+    };
+    initialize();
+  }, []);
 
   const handleGoTasks = () => {
     navigate('/tasks');
   };
 
-  const [mCodeOpen, setMCodeOpen] = useState(false)
   const onCloseMCode = () => {
-    setMCodeOpen(false)
+    setMCodeOpen(false);
   }
+
   const openMCode = () => {
-    setMCodeOpen(true)
+    setMCodeOpen(true);
   }
 
   const handleClickCopyCode = () => {
     try {
-      // Try the modern Clipboard API first
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(inviteCode)
           .then(() => {
             alert('Invite code copied to clipboard!');
           })
           .catch(err => {
-            // Fallback to execCommand if Clipboard API fails
             fallbackCopyToClipboard(inviteCode);
           });
       } else {
-        // Fallback for browsers that don't support Clipboard API
         fallbackCopyToClipboard(inviteCode);
       }
     } catch (err) {
@@ -149,11 +139,9 @@ function FriendsPage() {
   }
 
   const fallbackCopyToClipboard = (text: string) => {
-    // Create a temporary textarea element
     const textArea = document.createElement('textarea');
     textArea.value = text;
     
-    // Make it invisible but part of the document
     textArea.style.position = 'fixed';
     textArea.style.top = '0';
     textArea.style.left = '0';
@@ -170,7 +158,6 @@ function FriendsPage() {
     textArea.select();
     
     try {
-      // Execute the copy command
       const successful = document.execCommand('copy');
       if (successful) {
         alert('Invite code copied to clipboard!');
@@ -182,8 +169,11 @@ function FriendsPage() {
       alert('Could not copy invite code. Please try manually selecting and copying it.');
     }
     
-    // Clean up
     document.body.removeChild(textArea);
+  }
+
+  if (isLoading) {
+    return <div>Loading...</div>;
   }
 
   return (
@@ -213,21 +203,21 @@ function FriendsPage() {
       :
       <div className={style.friends}>
         <div className={style.friendCount}><span>{list.length}</span>Friends</div>
-      {list.map((item: any, index) => (
-        <div key={index} className={style.friend}>
-          <div className={style.avatar}><img src={item.avatar || Default_Avatar} alt="" /></div>
-          <div className={style.infoBox}>
-            <div className={style.info}>
-              <div className={style.name}>{item.name}</div>
-              <div className={style.cnt}><div className={style.cntIcon}></div>{item.friendnum}</div>
-            </div>
-            <div className={style.rewardsInfo}>
-              <div className={style.coin}></div>
-              <span>+{fmtInt(item.rewards)}</span>
+        {list.map((item: any, index) => (
+          <div key={index} className={style.friend}>
+            <div className={style.avatar}><img src={item.avatar || Default_Avatar} alt="" /></div>
+            <div className={style.infoBox}>
+              <div className={style.info}>
+                <div className={style.name}>{item.name}</div>
+                <div className={style.cnt}><div className={style.cntIcon}></div>{item.friendnum}</div>
+              </div>
+              <div className={style.rewardsInfo}>
+                <div className={style.coin}></div>
+                <span>+{fmtInt(item.rewards)}</span>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        ))}
       </div>
       }
       {inviteCode &&
@@ -237,13 +227,20 @@ function FriendsPage() {
       </div>
       }
       <Modal
-        isOpen={mCodeOpen} onClose={onCloseMCode} overlayClassName={undefined} contentClassName={undefined}>
+        isOpen={mCodeOpen} 
+        onClose={onCloseMCode} 
+        overlayClassName={undefined} 
+        contentClassName={undefined}
+      >
         <div className="md-title">Your Invitation Code</div>
-        <div className={style.myInviteCode}>{inviteCode}<div className={style.copyIcon} onClick={handleClickCopyCode}></div></div>
+        <div className={style.myInviteCode}>
+          {inviteCode}
+          <div className={style.copyIcon} onClick={handleClickCopyCode}></div>
+        </div>
         <div className={style.inviteTip}>Invite your friends to fill in this code</div>
       </Modal>
     </div>
   );
 }
-      
+
 export default FriendsPage;

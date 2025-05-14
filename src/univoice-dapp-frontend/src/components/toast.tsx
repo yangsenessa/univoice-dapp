@@ -1,30 +1,44 @@
 import { createRef, forwardRef, useImperativeHandle, useState } from 'react'
 import style from './toast.module.scss'
 
-const Toast = forwardRef((props, ref) => {
-  const [toasts, setToasts] = useState([])
+interface ToastProps {}
+
+interface ToastRef {
+  show: (message: string, mtype: ToastType) => void;
+}
+
+type ToastType = 'info' | 'warn' | 'error' | 'success';
+
+interface ToastItem {
+  id: number;
+  message: string;
+  mtype: ToastType;
+}
+
+const Toast = forwardRef<ToastRef, ToastProps>((props, ref) => {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   useImperativeHandle(ref, () => ({
-    show: (message: string, mtype: string) => {
-      addToast(message, mtype)
+    show: (message: string, mtype: ToastType) => {
+      addToast(message, mtype);
     }
   }));
 
-  const addToast = (message, mtype) => {
-    const id = Date.now()
+  const addToast = (message: string, mtype: ToastType) => {
+    const id = Date.now();
     setToasts((prevToasts) => [
       ...prevToasts,
       { id, message, mtype }
-    ])
+    ]);
     
     setTimeout(() => {
-      removeToast(id)
+      removeToast(id);
     }, 8000);
-  }
+  };
 
-  const removeToast = (id) => {
+  const removeToast = (id: number) => {
     setToasts((prevToasts) => prevToasts.filter(toast => toast.id !== id));
-  }
+  };
 
   return (
     <div className={style.container}>
@@ -37,7 +51,7 @@ const Toast = forwardRef((props, ref) => {
                 {toast.mtype === 'warn' && <div className={style.title}>Warning</div>}
                 {toast.mtype === 'error' && <div className={style.title}>Error</div>}
                 {toast.mtype === 'success' && <div className={style.title}>Success</div>}
-                {(toast.mtype === 'info' || toast.mtype === '') && <div className={style.title}>Info</div>}
+                {toast.mtype === 'info' && <div className={style.title}>Info</div>}
                 <div className={style.ctx_msg} dangerouslySetInnerHTML={{ __html: toast.message }}></div>
               </div>
               <div className={style.close} onClick={() => removeToast(toast.id)}></div>
@@ -46,33 +60,33 @@ const Toast = forwardRef((props, ref) => {
         </div>
       ))}
     </div>
-  )
-})
+  );
+});
 
-const ToastRef = createRef<{ show: (msg: string, mtype: string) => {} }>();
+const ToastRef = createRef<ToastRef>();
 
 export const ToastContain = () => {
-  return <Toast ref={ToastRef} />
-}
+  return <Toast ref={ToastRef} />;
+};
 
-export const showToast = (msg: string, mtype: string = 'info') => {
+export const showToast = (msg: string, mtype: ToastType = 'info') => {
   if (ToastRef.current) {
-    ToastRef.current.show(msg, mtype)
+    ToastRef.current.show(msg, mtype);
   }
-}
+};
 
 export const toastInfo = (msg: string) => {
-  showToast(msg, 'info')
-}
+  showToast(msg, 'info');
+};
 
 export const toastWarn = (msg: string) => {
-  showToast(msg, 'warn')
-}
+  showToast(msg, 'warn');
+};
 
 export const toastError = (msg: string) => {
-  showToast(msg, 'error')
-}
+  showToast(msg, 'error');
+};
 
 export const toastSuccess = (msg: string) => {
-  showToast(msg, 'success')
-}
+  showToast(msg, 'success');
+};

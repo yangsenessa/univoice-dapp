@@ -1,17 +1,17 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import style from './tasks.module.scss'
 import TaskItem from '@/components/task-item';
 import { useNavigate } from 'react-router-dom';
 import IconX from '@/assets/svg/logo_twitter.svg'
 import IconTG from '@/assets/svg/logo_telegram.svg'
 import IconYTB from '@/assets/svg/logo_YouTuBe.svg'
-import { get_user_tasks } from '@/utils/callbackend'; // Import the API function
+import { get_user_tasks } from '@/utils/callbackend';
+import { WALLET_TYPE } from '@/utils/uv_const'
 import { useAcountStore } from '@/stores/user'
-import { WALLET_TYPE} from '@/utils/uv_const'
-
 
 function TasksPage() {
   const navigate = useNavigate();
+  const { getPrincipal, setUserByWallet } = useAcountStore();
 
   const initList = [
     {
@@ -34,28 +34,43 @@ function TasksPage() {
   ];
 
   const [tasks, setTasks] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    initData();
-  }, []);
+  const principal_id = async () => {
+    const principalId = getPrincipal();
+
+    if (!principalId) {
+      try {
+        const { reConnectPlug, getPlugPrincipal } = await import('@/utils/icplug');
+        await reConnectPlug();
+        const newPrincipalId = await getPlugPrincipal();
+
+        if (newPrincipalId) {
+          setUserByWallet(WALLET_TYPE.PLUG, newPrincipalId);
+          return newPrincipalId;
+        }
+      } catch (error) {
+        console.error("Failed to reconnect to plug wallet:", error);
+      }
+      return '';
+    }
+
+    return principalId;
+  }
 
   const initData = async () => {
     try {
-      // Get principal ID - you'll need to implement this based on your authentication system
-      const principalId = await principal_id(); // Get principal ID using the defined function
+      const principalId = await principal_id();
       if (!principalId) {
         console.error("No principal ID available");
-        setTasks(initList); // Use initial list if no principal ID
+        setTasks(initList);
         return;
       }
 
-      // Call backend to get user tasks
       const userTasks = await get_user_tasks(principalId);
 
       if (userTasks && userTasks.length > 0) {
-        // Merge backend data with UI display data
         const newList = userTasks.map((item: any, idx: number) => {
-          // Make sure we don't go out of bounds of initList
           const uiData = idx < initList.length ? initList[idx] : {};
           return {
             ...uiData,
@@ -65,7 +80,6 @@ function TasksPage() {
 
         setTasks(newList);
       } else {
-        // If no tasks returned from backend, use initial list with default values
         const defaultList = initList.map((item, idx) => {
           return {
             ...item,
@@ -86,39 +100,21 @@ function TasksPage() {
     } catch (error) {
       console.error("Failed to load tasks:", error);
       setTasks([]);
+    } finally {
+      setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    initData();
+  }, []);
 
   const handleGoFriends = () => {
     navigate('/friends');
   };
 
-  const principal_id = () => {
-    const principalId = useAcountStore.getState().getPrincipal();
-
-    if (!principalId) {
-      // Attempt to reconnect to plug and get principal
-      const getPlugConnect = async () => {
-        try {
-          const { reConnectPlug, getPlugPrincipal } = await import('@/utils/icplug');
-          await reConnectPlug();
-          const newPrincipalId = await getPlugPrincipal();
-
-          if (newPrincipalId) {
-            useAcountStore.getState().setUserByWallet(WALLET_TYPE.PLUG, newPrincipalId);
-            return newPrincipalId;
-          }
-        } catch (error) {
-          console.error("Failed to reconnect to plug wallet:", error);
-        }
-        return '';
-      };
-
-      return getPlugConnect();
-    }
-
-    return principalId;
-
+  if (isLoading) {
+    return <div>Loading...</div>;
   }
 
   return (

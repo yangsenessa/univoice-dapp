@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import style from './task-item.module.scss'
-import { useAcountStore } from '@/stores/user';
 import { toastInfo, toastError, toastWarn } from '@/components/toast';
 import { fmtInt } from '@/utils/index';
-import { update_task_status } from '@/utils/callbackend'; // Import the API function
-
+import { update_task_status } from '@/utils/callbackend';
+import { useAcountStore } from '@/stores/user'
 
 const TaskItem = ({
     item,
@@ -21,18 +20,23 @@ const TaskItem = ({
   const { getPrincipal } = useAcountStore();
 
   useEffect(() => {
-    !isComplate && setComplate(item.status === 'FINISH');
-  }, [isComplate]);
+    if (!isComplate) {
+      setComplate(item.status === 'FINISH');
+    }
+  }, [item.status, isComplate]);
 
   const onTapTask = async () => {
     if (isComplate) return;
 
-    item.task_url && openUrl();
+    if (item.task_url) {
+      openUrl();
+    }
 
-    // todo call api
     try {
       const res = await finishTask(getPrincipal(), item.task_id);
-      setComplate(true);
+      if (res) {
+        setComplate(true);
+      }
     } catch (error) {
       console.log('🚀 ~ onTapTask ~ error:', error);
       toastError('something wrong, please try again');
@@ -40,7 +44,7 @@ const TaskItem = ({
   };
 
   const openUrl = () => {
-    const w = window.open(item.task_url, '_blank');
+    window.open(item.task_url, '_blank');
   }
 
   const finishTask = async (principalId: string, taskId: string) => {
@@ -69,7 +73,10 @@ const TaskItem = ({
   };
 
   return (
-    <div className={`${style.task} ${customeClass} ${ hideAction || isComplate || !item.task_url ? style.disable : style.actable}`} onClick={() => !hideAction && onTapTask()}>
+    <div 
+      className={`${style.task} ${customeClass} ${hideAction || isComplate || !item.task_url ? style.disable : style.actable}`} 
+      onClick={() => !hideAction && onTapTask()}
+    >
       <div className={`${style.taskIcon} ${customeIconClass}`}>
         <img src={item.logo || item.icon} alt="" />
       </div>
@@ -80,8 +87,8 @@ const TaskItem = ({
           <span>+{fmtInt(item.rewards)}</span>
         </div>
       </div>
-      <div className={`${style.go} ${ hideAction || !item.task_url ? style.hiddenGo : ''}`}>
-        <div className={`${style.statusIcon} ${ isComplate ? style.statusChecked : style.statusGo}`}></div>
+      <div className={`${style.go} ${hideAction || !item.task_url ? style.hiddenGo : ''}`}>
+        <div className={`${style.statusIcon} ${isComplate ? style.statusChecked : style.statusGo}`}></div>
       </div>
     </div>
   );

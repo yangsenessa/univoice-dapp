@@ -1,5 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, ReactNode } from 'react'
 // import style from './btn-wallet-login.module.scss'
+
+interface ModalDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  closeOnOverlayClick?: boolean;
+  showCloseButton?: boolean;
+  overlayClassName?: string;
+  contentClassName?: string;
+}
 
 const ModalDialog = ({
   isOpen,
@@ -9,9 +19,9 @@ const ModalDialog = ({
   showCloseButton = true,
   overlayClassName,
   contentClassName
-}) => {
+}: ModalDialogProps) => {
 
-  const stopPropagation = (e) => {
+  const stopPropagation = (e: React.MouseEvent) => {
     e.stopPropagation();
   }
 
@@ -22,20 +32,25 @@ const ModalDialog = ({
     return () => {
       document.body.classList.remove('modal-open')
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
-    <div className={`${'modal-dialog'} ${overlayClassName ? overlayClassName : ''}`}
-      onClick={closeOnOverlayClick ? onClose : null}>
-      <div className={`${'modal-content'} ${contentClassName ? contentClassName : ''}`} onClick={stopPropagation}>
+    <div 
+      className={`modal-dialog ${overlayClassName || ''}`}
+      onClick={closeOnOverlayClick ? onClose : undefined}
+    >
+      <div 
+        className={`modal-content ${contentClassName || ''}`} 
+        onClick={stopPropagation}
+      >
         <div className="md-ctx-wrapper">
           {children}
         </div>
-        {showCloseButton &&
-        <div className="close-icon" onClick={onClose}>&times;</div>
-        }
+        {showCloseButton && (
+          <div className="close-icon" onClick={onClose}>&times;</div>
+        )}
       </div>
     </div>
   )

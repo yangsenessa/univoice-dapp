@@ -1,27 +1,46 @@
 import { useEffect, useState } from 'react';
 
-const Timer = (props:{ start: number }) => {
-  const [time, setTime] = useState(0)
+interface TimerProps {
+  start: number;
+}
+
+const Timer = ({ start }: TimerProps) => {
+  const [time, setTime] = useState(0);
   
   useEffect(() => {
-    let interval;
-    if (props.start !== 0) {
-      setTime(0)
-      interval = setInterval(() => {
-        setTime(new Date().getTime() - props.start)
+    let interval: number | undefined;
+    
+    if (start !== 0) {
+      setTime(0);
+      interval = window.setInterval(() => {
+        setTime(new Date().getTime() - start);
       }, 50);
-    } else {
-      clearInterval(interval)
     }
-    return () => clearInterval(interval);
-  }, [props.start]);
+    
+    return () => {
+      if (interval) {
+        window.clearInterval(interval);
+      }
+    };
+  }, [start]);
+
+  const formatTime = (ms: number) => {
+    return ("0" + Math.floor((ms / 60000) % 60)).slice(-2);
+  };
+
+  const formatSeconds = (ms: number) => {
+    return ("0" + Math.floor((ms / 1000) % 60)).slice(-2);
+  };
+
+  const formatMilliseconds = (ms: number) => {
+    return ("0" + Math.floor((ms / 10) % 100)).slice(-2);
+  };
 
   return (
     <>
-      <span>{("0" + Math.floor((time / 3600000) % 60)).slice(-2)}:</span>
-      <span>{("0" + Math.floor((time / 60000) % 60)).slice(-2)}:</span>
-      <span>{("0" + Math.floor((time / 1000) % 60)).slice(-2)}</span>
-      {/* <span>.{("0" + ((time / 10) % 100)).slice(-2)}</span> */}
+      <span>{formatTime(time)}:</span>
+      <span>{formatSeconds(time)}</span>
+      <span>.{formatMilliseconds(time)}</span>
     </>
   );
 }
